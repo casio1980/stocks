@@ -1,6 +1,10 @@
-import { figiUSD } from "./const";
+import { figiUSD, figiTWTR, DATE_FORMAT } from "./const";
 import getAPI from "./lib/api";
 import { info } from "./lib/logger";
+import { Candle, CandleResolution } from "@tinkoff/invest-openapi-js-sdk";
+import moment from "moment";
+import fs from "fs";
+import { EMA, MACD } from "technicalindicators";
 
 require("dotenv").config();
 
@@ -11,13 +15,59 @@ if (isProduction) info("*** PRODUCTION MODE ***");
 
 (async function () {
   try {
+    const interval: CandleResolution = "day";
+
+    /*
     const portfolio = await api.portfolio();
     const { positions } = portfolio;
 
-    // const usd = positions.find((el) => el.figi === figiUSD);
-
+    const usd = positions.find((el) => el.figi === figiUSD);
     info(positions);
-    // info(usd);
+    */
+    /*
+    const from = `${moment().startOf("year").format(DATE_FORMAT)}T00:00:00Z`;
+    const to = `${moment().format(DATE_FORMAT)}T00:00:00Z`;
+    const { candles } = await api.candlesGet({
+      from,
+      to,
+      figi: figiTWTR,
+      interval,
+    });
+
+    fs.writeFileSync(
+      `data/twtr${interval}.json`,
+      JSON.stringify(candles),
+      "utf8"
+    );
+    */
+
+    const twtr = JSON.parse(
+      fs.readFileSync(`data/twtr${interval}.json`, "utf8")
+    ) as Candle[];
+
+    const fastPeriod = 12;
+    const slowPeriod = 26;
+    const fastOffset = fastPeriod - 1;
+    const slowOffset = slowPeriod - 1;
+    const values = twtr.map(({ c }) => c);
+
+    const ema = EMA.calculate({ values, period: fastPeriod });
+    const macd = MACD.calculate({
+      values,
+      fastPeriod,
+      slowPeriod,
+      signalPeriod: 9,
+      SimpleMAOscillator: false,
+      SimpleMASignal: false,
+    });
+
+    const result = twtr.map((item, i) => ({
+      ...item,
+      ema: ema[i - fastOffset],
+      macd: macd[i - slowOffset],
+    }));
+
+    console.log(">", result);
   } catch (err) {
     info("FATAL", err);
   }

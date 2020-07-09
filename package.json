@@ -23,6 +23,8 @@
   },
   "dependencies": {
     "@tinkoff/invest-openapi-js-sdk": "^1.2.15",
-    "dotenv": "^8.2.0"
+    "dotenv": "^8.2.0",
+    "moment": "^2.27.0",
+    "technicalindicators": "^3.1.0"
   }
 }

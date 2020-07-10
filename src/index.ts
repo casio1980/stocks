@@ -1,10 +1,10 @@
-import { figiUSD, figiTWTR, DATE_FORMAT } from "./const";
-import getAPI from "./lib/api";
-import { info } from "./lib/logger";
 import { Candle, CandleResolution } from "@tinkoff/invest-openapi-js-sdk";
-import moment from "moment";
-import fs from "fs";
 import { EMA, MACD } from "technicalindicators";
+import { figiUSD, figiTWTR, DATE_FORMAT } from "./const";
+import { info } from "./lib/logger";
+import fs from "fs";
+import getAPI from "./lib/api";
+import moment from "moment";
 
 require("dotenv").config();
 
@@ -16,6 +16,7 @@ if (isProduction) info("*** PRODUCTION MODE ***");
 (async function () {
   try {
     const interval: CandleResolution = "day";
+    const filename = `data/twtr-${interval}.json`;
 
     /*
     const portfolio = await api.portfolio();
@@ -26,24 +27,17 @@ if (isProduction) info("*** PRODUCTION MODE ***");
     */
     /*
     const from = `${moment().startOf("year").format(DATE_FORMAT)}T00:00:00Z`;
-    const to = `${moment().format(DATE_FORMAT)}T00:00:00Z`;
+    const to = `${moment().add(1, "days").format(DATE_FORMAT)}T00:00:00Z`;
     const { candles } = await api.candlesGet({
       from,
       to,
       figi: figiTWTR,
       interval,
     });
-
-    fs.writeFileSync(
-      `data/twtr${interval}.json`,
-      JSON.stringify(candles),
-      "utf8"
-    );
+    fs.writeFileSync(filename, JSON.stringify(candles), "utf8");
     */
 
-    const twtr = JSON.parse(
-      fs.readFileSync(`data/twtr${interval}.json`, "utf8")
-    ) as Candle[];
+    const twtr = JSON.parse(fs.readFileSync(filename, "utf8")) as Candle[];
 
     const fastPeriod = 12;
     const slowPeriod = 26;

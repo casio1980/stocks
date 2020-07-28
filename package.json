@@ -4,14 +4,15 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "npm run build-ts",
     "build-ts": "tsc",
+    "build": "npm run build-ts",
+    "robot": "node dist/robot.js",
     "serve": "node dist/index.js",
-    "start": "npm run serve",
+    "start": "npm run robot",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "watch": "concurrently -k -p \"[{name}]\" -n \"TypeScript,Node\" -c \"yellow.bold,cyan.bold,green.bold\" \"npm run watch-ts\" \"npm run watch-node\"",
-    "watch-node": "nodemon dist/index.js",
-    "watch-ts": "tsc -w"
+    "watch-node": "nodemon dist/robot.js",
+    "watch-ts": "tsc -w",
+    "watch": "concurrently -k -p \"[{name}]\" -n \"TypeScript,Node\" -c \"yellow.bold,cyan.bold,green.bold\" \"npm run watch-ts\" \"npm run watch-node\""
   },
   "author": "",
   "license": "ISC",

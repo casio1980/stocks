@@ -1,4 +1,5 @@
 import { Candle, CandleResolution } from "@tinkoff/invest-openapi-js-sdk";
+import { State, Decision, DecisionFactory } from './types'
 import { EMA, MACD } from "technicalindicators";
 import {
   figiUSD,
@@ -15,7 +16,6 @@ import moment from "moment";
 require("dotenv").config();
 
 const api = getAPI();
-const isProduction = process.env.PRODUCTION === "true";
 
 const fmtNumber = (num: number) => +num.toFixed(2);
 
@@ -30,25 +30,6 @@ const isClosingMarket = (date: string) => {
 
 const figiNAME = "twtr";
 const figi = figiTWTR;
-
-declare type State = {
-  assets: number;
-  money: number;
-  price?: number;
-  positionCount: number;
-};
-
-declare type Decision = {
-  name: string;
-  func: (
-    state: State,
-    candle: Candle,
-    index: number,
-    candles: Candle[]
-  ) => number | undefined;
-};
-
-declare type DecisionFactory = (args?: any) => Decision[];
 
 let state: State;
 
@@ -68,16 +49,16 @@ const channel = {
 //   return { l, h: l + height };
 // };
 
-if (isProduction) info("*** PRODUCTION MODE ***");
+if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
 
 /*
 (async function () {
   try {
-    api.candle({ figi, interval }, (candle) => {
-      const { o, c, h, l, v, time } = candle;
-      // const date = moment(time).format(DATE_FORMAT);
-      info(calcChannel(channel, "2020-07-10"));
-    });
+    // api.candle({ figi, interval }, (candle) => {
+    //   const { o, c, h, l, v, time } = candle;
+    //   // const date = moment(time).format(DATE_FORMAT);
+    //   info(calcChannel(channel, "2020-07-10"));
+    // });
 
     /*
     const portfolio = await api.portfolio();
@@ -86,7 +67,8 @@ if (isProduction) info("*** PRODUCTION MODE ***");
     const usd = positions.find((el) => el.figi === figiUSD);
     info(positions);
     */
-/*
+
+    /*
     const twtr = JSON.parse(fs.readFileSync(filename, "utf8")) as Candle[];
 
     const fastPeriod = 12;
@@ -112,57 +94,6 @@ if (isProduction) info("*** PRODUCTION MODE ***");
     }));
 
     info(">", result);
-  } catch (err) {
-    info("FATAL", err);
-  }
-})();
-*/
-
-//
-// DOWNLOAD ROUTINE
-//
-/*
-(async function () {
-  try {
-    // Downloading day candles
-    info(`Downloading day candles for ${figiNAME.toUpperCase()}...`);
-    const { candles: days } = await api.candlesGet({
-      from: `${moment().startOf("year").format(DATE_FORMAT)}T00:00:00Z`,
-      to: `${moment().add(1, "days").format(DATE_FORMAT)}T00:00:00Z`,
-      figi,
-      interval: "day",
-    });
-
-    const filename = `data/${figiNAME.toLowerCase()}-day.json`;
-    info(`Writing ${filename}...`);
-    fs.writeFileSync(filename, JSON.stringify(days), "utf8");
-    // const candles = JSON.parse(fs.readFileSync(filename, "utf8")) as Candle[];
-
-    // Downloading 1min candles
-    const dates = days.map((c) => moment(c.time).format(DATE_FORMAT));
-    for (const date of dates) {
-      const filename = `data/${figiNAME}/${figiNAME}-${date}.json`;
-
-      if (fs.existsSync(filename)) {
-        const candles = JSON.parse(
-          fs.readFileSync(filename, "utf8")
-        ) as Candle[];
-        info(`${filename}... Skipping (${candles.length} candles)`);
-      } else {
-        const dt = moment(date);
-        const { candles: minutes } = await api.candlesGet({
-          from: `${dt.format(DATE_FORMAT)}T00:00:00Z`,
-          to: `${dt.add(1, "days").format(DATE_FORMAT)}T00:00:00Z`,
-          figi,
-          interval: "1min",
-        });
-
-        fs.writeFileSync(filename, JSON.stringify(minutes), "utf8");
-        info(`${filename}... Ok`);
-      }
-    }
-
-    info("Done.");
   } catch (err) {
     info("FATAL", err);
   }
@@ -246,13 +177,26 @@ if (isProduction) info("*** PRODUCTION MODE ***");
     },
   };
 
-  // const buyStrategies = [...simpleBuyFactory(), regularMarketBuy];
+  const buyStrategies = [...simpleBuyFactory(), regularMarketBuy]
+    .map((s, index, arr) => {
+      return [
+        s,
+        arr
+          .filter((item) => item !== s)
+          .map((item) => ({
+            name: `${s.name} && ${item.name}`,
+            func: (state: State, candle: Candle, index: number, candles: Candle[]) =>
+              s.func(state, candle, index, candles) && item.func(state, candle, index, candles),
+          })),
+      ].flat();
+    })
+    .flat();
   // const sellStrategies = [
   //   ...takeProfitSellFactory([1 + COMMISSION * 2]),
   //   marketCloseSell,
   // ];
 
-  const buyStrategies = [regularMarketBuy];
+  // const buyStrategies = [regularMarketBuy];
   const sellStrategies = [
     ...takeProfitSellFactory([
       1 + COMMISSION * 3,
@@ -358,8 +302,8 @@ if (isProduction) info("*** PRODUCTION MODE ***");
           positionCount: state.positionCount,
         };
       })
-      .sort((a, b) => b.money - a.money);
-    // .slice(0, 5);
+      .sort((a, b) => b.money - a.money)
+      .slice(0, 15);
 
     info("Results:");
 

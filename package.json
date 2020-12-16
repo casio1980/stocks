@@ -6,6 +6,7 @@
   "scripts": {
     "build-ts": "tsc",
     "build": "npm run build-ts",
+    "download": "node dist/download.js",
     "robot": "node dist/robot.js",
     "serve": "node dist/index.js",
     "start": "npm run robot",

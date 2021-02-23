@@ -1,5 +1,5 @@
 import { Candle, CandleResolution } from "@tinkoff/invest-openapi-js-sdk";
-import { State, Decision, DecisionFactory } from './types'
+import { State, Decision, DecisionFuncParams, DecisionFactory } from './types'
 import { EMA, MACD } from "technicalindicators";
 import {
   figiUSD,
@@ -105,21 +105,26 @@ if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
 //
 (async function () {
   const simpleBuyFactory: DecisionFactory = () => [
+    // {
+    //   name: "Buy when OPEN > CLOSE",
+    //   func: ({ state, candle, index, candles }) => {
+    //     const { assets } = state;
+    //     const { o: price } = candle;
+    //     if (assets === 0 && index > 0 && price > candles[index - 1].c) {
+    //       return price;
+    //     }
+    //   },
+    // },
     {
-      name: "Buy when OPEN > CLOSE",
-      func: (
-        state: State,
-        candle: Candle,
-        index: number,
-        candles: Candle[]
-      ) => {
+      name: "Buy when OPEN >>> CLOSE",
+      func: ({ state, candle, index, candles }) => {
         const { assets } = state;
         const { o: price } = candle;
-        if (assets === 0 && index > 0 && price > candles[index - 1].c) {
+        if (assets === 0 && index > 0 && price > candles[index - 1].c + 0.01) {
           return price;
         }
       },
-    },
+    },    
     // {
     //   name: "Buy when OPEN > HIGH",
     //   func: (
@@ -139,7 +144,7 @@ if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
 
   const regularMarketBuy: Decision = {
     name: "Buy on Regular market",
-    func: (state: State, candle: Candle, index: number, candles: Candle[]) => {
+    func: ({ state, candle }) => {
       const { assets } = state;
       const { time, o: price } = candle;
       if (assets === 0 && isRegularMarket(time)) {
@@ -152,12 +157,7 @@ if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
     profits.map((profit) => {
       return {
         name: `Sell when PROFIT = ${profit}`,
-        func: (
-          state: State,
-          candle: Candle,
-          index: number,
-          candles: Candle[]
-        ) => {
+        func: ({ state, candle }) => {
           const { assets } = state;
           if (assets > 0 && candle.h >= state.price * profit) {
             return state.price * profit;
@@ -166,16 +166,16 @@ if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
       };
     });
 
-  const marketCloseSell: Decision = {
-    name: "Sell at market close",
-    func: (state: State, candle: Candle, index: number, candles: Candle[]) => {
-      const { assets } = state;
-      const { time, o: price } = candle;
-      if (assets > 0 && isClosingMarket(time)) {
-        return price;
-      }
-    },
-  };
+  // const marketCloseSell: Decision = {
+  //   name: "Sell at market close",
+  //   func: ({ state, candle }) => {
+  //     const { assets } = state;
+  //     const { time, o: price } = candle;
+  //     if (assets > 0 && isClosingMarket(time)) {
+  //       return price;
+  //     }
+  //   },
+  // };
 
   const buyStrategies = [...simpleBuyFactory(), regularMarketBuy]
     .map((s, index, arr) => {
@@ -185,8 +185,8 @@ if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
           .filter((item) => item !== s)
           .map((item) => ({
             name: `${s.name} && ${item.name}`,
-            func: (state: State, candle: Candle, index: number, candles: Candle[]) =>
-              s.func(state, candle, index, candles) && item.func(state, candle, index, candles),
+            func: (params: DecisionFuncParams) =>
+              s.func(params) && item.func(params),
           })),
       ].flat();
     })
@@ -251,8 +251,8 @@ if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
         };
 
         data.forEach((candle, index, candles) => {
-          const buyPrice = buy.func(state, candle, index, candles);
-          const sellPrice = sell.func(state, candle, index, candles);
+          const buyPrice = buy.func({ state, candle, index, candles });
+          const sellPrice = sell.func({ state, candle, index, candles });
 
           if (buyPrice) {
             const assets = Math.floor(

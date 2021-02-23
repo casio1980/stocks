@@ -16,7 +16,11 @@ if (isProduction) info("*** PRODUCTION MODE ***");
 (async function () {
   try {
     const interval: CandleResolution = "day";
-    const filename = `data/twtr-${interval}.json`;
+    const filename = `data/stocks.json`;
+
+    const stocks = await api.stocks();
+    const result = stocks.instruments.filter(({ currency }) => (currency === 'USD')).map(({ ticker, name }) => ({ ticker, name }))
+    fs.writeFileSync(filename, JSON.stringify(result), "utf8");
 
     /*
     const portfolio = await api.portfolio();
@@ -37,6 +41,7 @@ if (isProduction) info("*** PRODUCTION MODE ***");
     fs.writeFileSync(filename, JSON.stringify(candles), "utf8");
     */
 
+    /*
     const twtr = JSON.parse(fs.readFileSync(filename, "utf8")) as Candle[];
 
     const fastPeriod = 12;
@@ -60,6 +65,7 @@ if (isProduction) info("*** PRODUCTION MODE ***");
       ema: ema[i - fastOffset],
       macd: macd[i - slowOffset],
     }));
+    */
 
     console.log(">", result);
   } catch (err) {

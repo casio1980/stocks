@@ -11,6 +11,7 @@ import {
 import { info } from "./lib/logger";
 import fs from "fs";
 import getAPI from "./lib/api";
+import { loadData } from "./lib/utils";
 import moment from "moment";
 
 require("dotenv").config();
@@ -28,7 +29,7 @@ const isClosingMarket = (date: string) => {
   return d.getHours() * 60 + d.getMinutes() >= 23 * 60 + 30;
 };
 
-const figiNAME = "twtr";
+const figiName = "twtr";
 const figi = figiTWTR;
 
 let state: State;
@@ -230,18 +231,85 @@ if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
     .flat();
 
   try {
-    info(`Loading candles for ${figiNAME.toUpperCase()}...`);
-
-    const dataFolder = `data/${figiNAME}`;
-    const dataFiles = fs.readdirSync(dataFolder);
-    const data = dataFiles
-      .map((fileName) =>
-        JSON.parse(fs.readFileSync(`${dataFolder}/${fileName}`, "utf8"))
-      )
-      .flat() as Candle[];
-
+    info(`Loading candles for ${figiName.toUpperCase()}...`);
+    const data = loadData(figiName)
     info(`Loaded ${data.length} candles, processing...`);
 
+    state = {
+      assets: 0,
+      money: INITIAL_MONEY,
+      positionCount: 0,
+    };
+
+    data.forEach((candle, index, candles) => {
+      if (index === 0) return
+
+      if (state.assets === 0) {
+        const prevCandle = candles[index - 1]
+        const buyPrice = candle.o
+        if (candle.o > prevCandle.h && prevCandle.v > 10000 && prevCandle.v < 40000) {
+          // BUY
+          const assets = Math.floor(
+            state.money / buyPrice / (1 + COMMISSION)
+          ); // max possible amount
+          const sum = fmtNumber(assets * buyPrice);
+          const comm = fmtNumber(sum * COMMISSION);
+
+          state = {
+            ...state,
+            assets,
+            money: fmtNumber(state.money - sum - comm),
+            price: buyPrice,
+          };
+        }
+      }
+
+      if (state.assets > 0) {
+        const takeProfit = state.price + state.price * 0.06
+        const stopLoss = state.price - state.price * 0.01
+        if (takeProfit <= candle.h) {
+          // TAKE PROFIT
+          const sum = fmtNumber(state.assets * takeProfit);
+          const comm = fmtNumber(sum * COMMISSION);
+
+          state = {
+            ...state,
+            assets: 0,
+            money: fmtNumber(state.money + sum - comm),
+            price: undefined,
+            positionCount: state.positionCount + 1,
+          };
+        } else if (candle.l <= stopLoss) {
+          // STOP LOSS
+          const sum = fmtNumber(state.assets * stopLoss);
+          const comm = fmtNumber(sum * COMMISSION);
+
+          state = {
+            ...state,
+            assets: 0,
+            money: fmtNumber(state.money + sum - comm),
+            price: undefined,
+            positionCount: state.positionCount + 1,
+          };
+        }
+      }
+    })
+
+    // reverting the last transaction
+    if (state.assets) {
+      const sum = fmtNumber(state.assets * state.price);
+      const comm = fmtNumber(sum * COMMISSION);
+
+      state = {
+        ...state,
+        assets: 0,
+        money: fmtNumber(state.money + sum + comm),
+        price: undefined,
+      };
+    }
+
+
+    /*
     const results = strategies
       .map(({ buy, sell }) => {
         state = {
@@ -304,12 +372,14 @@ if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
       })
       .sort((a, b) => b.money - a.money)
       .slice(0, 15);
+    */
 
     info("Results:");
+    info(state)
 
-    results.forEach((result) => {
-      info(result);
-    });
+    // results.forEach((result) => {
+    //   info(result);
+    // });
   } catch (err) {
     info("FATAL", err);
   }

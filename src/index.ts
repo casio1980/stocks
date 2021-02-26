@@ -1,29 +1,110 @@
 import { Candle, CandleResolution, CandleStreaming, PlacedMarketOrder, PortfolioPosition } from "@tinkoff/invest-openapi-js-sdk";
 import { EMA, MACD } from "technicalindicators";
-import { figiUSD, figiTWTR, DATE_FORMAT } from "./const";
+import { figiUSD, figiTWTR, figiFOLD, DATE_FORMAT } from "./const";
 import { info } from "./lib/logger";
 import fs, { stat, Stats } from "fs";
 import getAPI from "./lib/api";
 import moment from "moment";
+import { AvgLossInput } from "technicalindicators/declarations/Utils/AverageLoss";
 
 require("dotenv").config();
 
+const isProduction = process.env.PRODUCTION === "true";
+
 const api = getAPI();
-const figi = figiTWTR;
+const figi = figiFOLD;
 const lots = 1
 
-
-type Status = 'idle' | 'buying' | 'bought' | 'selling' | 'sold'
-
 type State = {
-  status: Status
+  busy: boolean,
   position?: PortfolioPosition
-  price?: number
-  takeProfit?: number
-  stopLoss?: number
+  estimatedPrice?: number
+  getPrice: () => number | undefined
+  getTake: () => number | undefined
+  getStop: () => number | undefined
 }
 
-const isProduction = process.env.PRODUCTION === "true";
+const state: State = {
+  busy: false,
+  position: undefined,
+  estimatedPrice: undefined,
+  getPrice: function() { return this.position?.averagePositionPrice?.value || this.estimatedPrice },
+  getTake: function() { return this.getPrice() + 0.1 }, // 0.6
+  getStop: function() { return this.getPrice() - 0.06 }  // 0.4
+}
+
+const updatePosition = async () => {
+  const { positions } = await api.portfolio();
+  state.position = positions.find((el) => el.figi === figi);
+}
+
+async function onCandleInitialized(candle: CandleStreaming, candles: CandleStreaming[]) {
+  info('Started at', candle.time)
+  // await api.candlesGet({ figi, from, interval: '1min', to: candle.time })
+
+  await updatePosition()
+  if (state.position) {
+    const orders = await api.orders()
+    const orderIds = orders.filter(o => o.figi === figi).map(o => o.orderId)
+
+    if (orderIds.length > 0) {
+      info('Cancelling old orders...')
+      for (const orderId of orderIds) {
+        await api.cancelOrder({ orderId })
+      }
+    }
+
+    const takeProfit = await api.limitOrder({ figi, lots: state.position.lots, operation: 'Sell', price: state.getTake() })
+    info('Created Take order:', takeProfit)
+  }
+
+  // setInterval(async () => {
+  //   await updatePosition()
+  // }, 60000)
+}
+
+async function onCandleUpdated(candle: CandleStreaming, prevCandle: CandleStreaming | undefined, candles: CandleStreaming[]) {
+  // if (!prevCandle) return
+  if (state.busy) return
+
+  if (!state.position) {
+    const volume = prevCandle.v + candle.v
+    const vSignal = volume > 10000 && volume < 40000
+    const pSignal = prevCandle.c > prevCandle.o && prevCandle.c <= candle.o // h
+
+    if (true/*vSignal && pSignal*/) {
+      state.estimatedPrice = candle.c
+
+      try {
+        state.busy = true
+        // await api.marketOrder({ figi, lots, operation: 'Buy' })
+        await updatePosition()
+      } catch (err) {
+        console.log("Unable to place Buy order:", err);
+      } finally {
+        state.busy = false
+      }
+    }
+  } else {
+    // Stop loss - BE CAREFUL
+    if (candle.c < state.getStop()) {
+      try {
+        state.busy = true
+        const stopLoss = await api.marketOrder({ figi, lots: state.position.lots, operation: 'Sell' })
+        info('Created Stop order:', stopLoss)
+        await updatePosition()
+      } catch (err) {
+        console.log("Unable to place Sell order:", err);
+      } finally {
+        state.busy = false
+      }
+    }
+  }
+}
+
+async function onCandleChanged(candle: CandleStreaming, prevCandle: CandleStreaming, candles: CandleStreaming[]) {
+  info(prevCandle.time, '->', candle.time)
+}
 
 (async function () {
   if (isProduction) info("*** PRODUCTION MODE ***")
@@ -31,85 +112,30 @@ const isProduction = process.env.PRODUCTION === "true";
     await api.sandboxClear();
     await api.setCurrenciesBalance({ currency: 'USD', balance: 100 });
 
-    // const test = await api.searchOne({ ticker: 'AAPL' });
+    // console.log(await api.searchOne({ ticker: 'FOLD' }))
   }
 
   try {
-    let lastCandle: CandleStreaming
-    const state: State = {
-      status: 'idle',
-      position: undefined,
-      price: undefined,
-      takeProfit: undefined,
-      stopLoss: undefined
-    }
+    const candles: CandleStreaming[] = []
+    let prevCandle: CandleStreaming
+
+    const getLastCandle = () => (candles[candles.length - 1])
 
     api.candle({ figi, interval: "1min" }, async candle => {
-      if (!lastCandle) {
-        lastCandle = candle
-        info('none ->', candle.time)
+      if (!getLastCandle()) {
+        candles.push(candle)
+        onCandleInitialized(candle, candles)
         return
       }
 
-      const { status } = state
-
-      if (status === 'idle' && lastCandle.time !== candle.time) {
-        // const vSignal = lastCandle.v > 10000 && lastCandle.v < 40000
-        // const pSignal = lastCandle.h < candle.o
-        const vSignal = true
-        const pSignal = lastCandle.c < candle.o
-        if (vSignal && pSignal) {
-          state.status = 'buying'
-          state.price = candle.c
-          state.takeProfit = state.price + 1
-          state.stopLoss = state.price - state.price * 0.01
-
-          try {
-            await api.marketOrder({ figi, lots, operation: 'Buy' })
-            state.status = 'bought'
-          } catch (err) {
-            console.log("!", err);
-          }          
-        }
-
-        info(lastCandle.time, '->', candle.time)
+      if (getLastCandle().time !== candle.time) {
+        prevCandle = getLastCandle()
+        candles.push(candle)
+        onCandleChanged(candle, prevCandle, candles)
+      } else {
+        candles[candles.length - 1] = candle
+        onCandleUpdated(candle, prevCandle, candles)
       }
-
-      if (status === 'bought') {
-        const portfolio = await api.portfolio();
-        const { positions } = portfolio;
-        const position = positions.find((el) => el.figi === figi);
-
-        if (position && status === 'bought') {
-          info('Bought', position)
-          state.position = position
-          state.status = 'selling'
-        }
-      }
-
-      if (status === 'selling') {
-        if (candle.c >= state.takeProfit || candle.c <= state.stopLoss) {
-          await api.marketOrder({ figi, lots: state.position.lots, operation: 'Sell' })
-          state.status = 'sold'
-        }
-      }
-
-      if (status === 'sold') {
-        const portfolio = await api.portfolio();
-        const { positions } = portfolio;
-        const position = positions.find((el) => el.figi === figi);
-
-        if (!position && status === 'sold') {
-          info('Sold')
-          state.position = undefined
-          state.price = undefined
-          state.takeProfit = undefined
-          state.stopLoss = undefined
-          state.status = 'idle'
-        }
-      }
-
-      lastCandle = candle
     });
 
     

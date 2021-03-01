@@ -1,6 +1,8 @@
 import fs from "fs";
 import { Candle } from "@tinkoff/invest-openapi-js-sdk";
 
+export function fmtNumber(number: any) { return +number.toFixed(2); }
+
 export function loadData(figiName: string) {
   const dataFolder = `data/${figiName}`;
   const dataFiles = fs.readdirSync(dataFolder);
@@ -10,4 +12,3 @@ export function loadData(figiName: string) {
     )
     .flat() as Candle[];
 }
- 

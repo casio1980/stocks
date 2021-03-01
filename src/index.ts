@@ -20,7 +20,9 @@ type State = {
   busy: boolean,
   position?: PortfolioPosition
   estimatedPrice?: number
-  lastOrderTime?: string,
+  lastOrderTime?: string
+  reservedLots: number
+  getAvailableLots: () => number | undefined
   getPrice: () => number | undefined
   getTake: () => number | undefined
   getStop: () => number | undefined
@@ -31,6 +33,8 @@ const state: State = {
   position: undefined,
   estimatedPrice: undefined,
   lastOrderTime: undefined,
+  reservedLots: 0,
+  getAvailableLots: function() { return (this.position?.lots || 0) - this.reservedLots },
   getPrice: function() { return this.position?.averagePositionPrice?.value || this.estimatedPrice },
   getTake: function() { return fmtNumber(this.getPrice() + 0.6) },
   getStop: function() { return fmtNumber(this.getPrice() - 0.4) }
@@ -39,22 +43,20 @@ const state: State = {
 const updatePosition = async () => {
   const { positions } = await api.portfolio();
 
-  const oldPosition = state.position
+  const oldLots = state.getAvailableLots()
   const oldPrice = state.getPrice()
   state.position = positions.find((el) => el.figi === figi);
 
-  if (!isEqual(oldPosition, state.position) || oldPrice !== state.getPrice()) {
+  if (oldLots !== state.getAvailableLots() || oldPrice !== state.getPrice()) {
     info(`Position update, price: ${oldPrice} -> ${state.getPrice()}`)
-
+    info(state.position)
     if (state.position) {
       await createTakeOrder()
     }
-  // } else {
-  //   info('>', state.position)
   }
 }
 
-const createTakeOrder = async () => {
+const cancelOrders = async () => {
   const orders = await api.orders()
   const orderIds = orders.filter(o => o.figi === figi).map(o => o.orderId)
 
@@ -64,67 +66,70 @@ const createTakeOrder = async () => {
       await api.cancelOrder({ orderId })
     }
   }
+}
 
-  const takeProfit = await api.limitOrder({ figi, lots: state.position.lots, operation: 'Sell', price: state.getTake() })
-  info('Created Take order:', takeProfit)
+const createTakeOrder = async () => {
+  await cancelOrders()
+  const takeProfit = await api.limitOrder({ figi, lots: state.getAvailableLots(), operation: 'Sell', price: state.getTake() })
+  info(`Created Take order @ ${state.getTake()}:`, takeProfit)
 }
 
 const waitForAveragePositionPrice = () => {}
 
 async function onCandleInitialized(candle: CandleStreaming, candles: CandleStreaming[]) {
-  info('Started at', candle.time)
   // await api.candlesGet({ figi, from, interval: '1min', to: candle.time })
 
-  await updatePosition()
+  const { positions } = await api.portfolio();
+  state.position = positions.find((el) => el.figi === figi);
+  if (state.position) {
+    info(`There is an open position of ${state.position.lots} lots @ ${state.getPrice()}`)
+    state.reservedLots = state.position.lots
+  }
+
   setInterval(async () => {
     await updatePosition()
   }, 30000)
 
-  if (state.position) {
-    await createTakeOrder()
-  }
+  info('Started at', candle.time)
 }
 
 async function onCandleUpdated(candle: CandleStreaming, prevCandle: CandleStreaming | undefined, candles: CandleStreaming[]) {
   if (!prevCandle) return
   if (state.busy) return
 
-  if (!state.position) {
+  if (state.getAvailableLots() === 0) {
     const volume = prevCandle.v + candle.v
     const vSignal = volume > 10000 && volume < 40000
-    const pSignal = prevCandle.c > prevCandle.o && prevCandle.c <= candle.o // h
+    const pSignal = prevCandle.o < prevCandle.c && candle.o < candle.c && prevCandle.h <= candle.o // && prevCandle.h === prevCandle.c
     const dupSignal = state.lastOrderTime !== candle.time
 
     if (vSignal && pSignal && dupSignal) {
       state.estimatedPrice = candle.c
+      // info("prevCandle:", prevCandle)
+      // info("Candle:", candle)
 
       try {
         state.busy = true
         await api.marketOrder({ figi, lots, operation: 'Buy' })
-        // await updatePosition()
-        // await createTakeOrder()
       } catch (err) {
-        console.log("Unable to place Buy order:", err)
+        info("Unable to place Buy order:", err)
         process.exit()
       } finally {
         state.lastOrderTime = candle.time
         state.busy = false
       }
     }
-  } else {
-    // Stop loss - BE CAREFUL
-    if (candle.c < state.getStop()) {
-      try {
-        state.busy = true
-        const stopLoss = await api.marketOrder({ figi, lots: state.position.lots, operation: 'Sell' })
-        info('Created Stop order:', stopLoss)
-        // await updatePosition()
-      } catch (err) {
-        console.log("Unable to place Sell order:", err)
-        process.exit()
-      } finally {
-        state.busy = false
-      }
+  } else if (state.getAvailableLots() > 0 && candle.c <= state.getStop()) {
+    try {
+      state.busy = true
+      await cancelOrders()
+      const stopLoss = await api.marketOrder({ figi, lots: state.getAvailableLots(), operation: 'Sell' })
+      info(`Created Stop order @ ${candle.c}:`, stopLoss)
+    } catch (err) {
+      info("Unable to place Stop order:", err)
+      process.exit()
+    } finally {
+      state.busy = false
     }
   }
 }

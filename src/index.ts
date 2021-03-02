@@ -83,7 +83,8 @@ async function onCandleInitialized(candle: CandleStreaming, candles: CandleStrea
   state.position = positions.find((el) => el.figi === figi);
   if (state.position) {
     info(`There is an open position of ${state.position.lots} lots @ ${state.getPrice()}`)
-    state.reservedLots = state.position.lots
+    process.exit()
+    // state.reservedLots = state.position.lots
   }
 
   setInterval(async () => {

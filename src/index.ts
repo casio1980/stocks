@@ -1,14 +1,27 @@
 import { Candle, CandleResolution, CandleStreaming, PlacedMarketOrder, PortfolioPosition } from "@tinkoff/invest-openapi-js-sdk";
 import { EMA, MACD } from "technicalindicators";
+import { AvgLossInput } from "technicalindicators/declarations/Utils/AverageLoss";
 import { figiUSD, figiTWTR, figiFOLD, DATE_FORMAT } from "./const";
-import { info } from "./lib/logger";
 import { fmtNumber } from "./lib/utils";
 import fs, { stat, Stats } from "fs";
 import getAPI from "./lib/api";
 import moment from "moment";
-import { AvgLossInput } from "technicalindicators/declarations/Utils/AverageLoss";
+import log4js from "log4js";
 
 require("dotenv").config();
+
+log4js.configure({
+  appenders: {
+    console: { type: "console" },
+    file: { type: "file", filename: "robot.log" },
+  },
+  categories: {
+    server: { appenders: ["file"], level: "trace" },
+    default: { appenders: ["console", "file"], level: "trace" },
+  },
+});
+
+const logger = log4js.getLogger(process.env.LOG_CATEGORY || "default");
 
 const isProduction = process.env.PRODUCTION === "true";
 
@@ -48,8 +61,8 @@ const updatePosition = async () => {
   state.position = positions.find((el) => el.figi === figi);
 
   if (oldLots !== state.getAvailableLots() || oldPrice !== state.getPrice()) {
-    info(`Position update, price: ${oldPrice} -> ${state.getPrice()}`)
-    info(state.position)
+    logger.info(`Position update, price: ${oldPrice} -> ${state.getPrice()}`)
+    logger.debug(state.position)
     if (state.position) {
       await createTakeOrder()
     }
@@ -61,7 +74,7 @@ const cancelOrders = async () => {
   const orderIds = orders.filter(o => o.figi === figi).map(o => o.orderId)
 
   if (orderIds.length > 0) {
-    info('Cancelling old orders...')
+    logger.info('Cancelling old orders...')
     for (const orderId of orderIds) {
       await api.cancelOrder({ orderId })
     }
@@ -71,7 +84,7 @@ const cancelOrders = async () => {
 const createTakeOrder = async () => {
   await cancelOrders()
   const takeProfit = await api.limitOrder({ figi, lots: state.getAvailableLots(), operation: 'Sell', price: state.getTake() })
-  info(`Created Take order @ ${state.getTake()}:`, takeProfit)
+  logger.info(`Created Take order @ ${state.getTake()}:`, takeProfit)
 }
 
 const waitForAveragePositionPrice = () => {}
@@ -82,7 +95,7 @@ async function onCandleInitialized(candle: CandleStreaming, candles: CandleStrea
   const { positions } = await api.portfolio();
   state.position = positions.find((el) => el.figi === figi);
   if (state.position) {
-    info(`There is an open position of ${state.position.lots} lots @ ${state.getPrice()}`)
+    logger.info(`There is an open position of ${state.position.lots} lots @ ${state.getPrice()}`)
     process.exit()
     // state.reservedLots = state.position.lots
   }
@@ -91,7 +104,7 @@ async function onCandleInitialized(candle: CandleStreaming, candles: CandleStrea
     await updatePosition()
   }, 30000)
 
-  info('Started at', candle.time)
+  logger.info('Started at', candle.time)
 }
 
 async function onCandleUpdated(candle: CandleStreaming, prevCandle: CandleStreaming | undefined, candles: CandleStreaming[]) {
@@ -106,14 +119,14 @@ async function onCandleUpdated(candle: CandleStreaming, prevCandle: CandleStream
 
     if (vSignal && pSignal && dupSignal) {
       state.estimatedPrice = candle.c
-      // info("prevCandle:", prevCandle)
-      // info("Candle:", candle)
+      // logger.debug("prevCandle:", prevCandle)
+      // logger.debug("Candle:", candle)
 
       try {
         state.busy = true
         await api.marketOrder({ figi, lots, operation: 'Buy' })
       } catch (err) {
-        info("Unable to place Buy order:", err)
+        logger.error("Unable to place Buy order:", err)
         process.exit()
       } finally {
         state.lastOrderTime = candle.time
@@ -125,9 +138,9 @@ async function onCandleUpdated(candle: CandleStreaming, prevCandle: CandleStream
       state.busy = true
       await cancelOrders()
       const stopLoss = await api.marketOrder({ figi, lots: state.getAvailableLots(), operation: 'Sell' })
-      info(`Created Stop order @ ${candle.c}:`, stopLoss)
+      logger.info(`Created Stop order @ ${candle.c}:`, stopLoss)
     } catch (err) {
-      info("Unable to place Stop order:", err)
+      logger.error("Unable to place Stop order:", err)
       process.exit()
     } finally {
       state.busy = false
@@ -136,11 +149,11 @@ async function onCandleUpdated(candle: CandleStreaming, prevCandle: CandleStream
 }
 
 async function onCandleChanged(candle: CandleStreaming, prevCandle: CandleStreaming, candles: CandleStreaming[]) {
-  info(prevCandle.time, '->', candle.time)
+  logger.info(prevCandle.time, '->', candle.time)
 }
 
 (async function () {
-  if (isProduction) info("*** PRODUCTION MODE ***")
+  if (isProduction) logger.info("*** PRODUCTION MODE ***")
   else {
     await api.sandboxClear();
     await api.setCurrenciesBalance({ currency: 'USD', balance: 100 });
@@ -211,6 +224,6 @@ async function onCandleChanged(candle: CandleStreaming, prevCandle: CandleStream
     console.log(">", result);
     */
   } catch (err) {
-    info("FATAL", err);
+    logger.fatal(err);
   }
 })();

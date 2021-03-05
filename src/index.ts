@@ -60,6 +60,11 @@ const updatePosition = async () => {
   const oldPrice = state.getPrice()
   state.position = positions.find((el) => el.figi === figi);
 
+  if (state.busy && !state.position) {
+    // FIXME dirty hack
+    state.busy = false
+  }
+
   if (oldLots !== state.getAvailableLots() || oldPrice !== state.getPrice()) {
     logger.info(`Position update, price: ${oldPrice} -> ${state.getPrice()}`)
     logger.debug(state.position)
@@ -84,7 +89,8 @@ const cancelOrders = async () => {
 const createTakeOrder = async () => {
   await cancelOrders()
   const takeProfit = await api.limitOrder({ figi, lots: state.getAvailableLots(), operation: 'Sell', price: state.getTake() })
-  logger.info(`Created Take order @ ${state.getTake()}:`, takeProfit)
+  logger.info(`Created Take order @ ${state.getTake()}`)
+  logger.debug(takeProfit)
 }
 
 const waitForAveragePositionPrice = () => {}
@@ -112,8 +118,8 @@ async function onCandleUpdated(candle: CandleStreaming, prevCandle: CandleStream
   if (state.busy) return
 
   if (state.getAvailableLots() === 0) {
-    const volume = prevCandle.v + candle.v
-    const vSignal = volume > 10000 && volume < 40000
+    const volume = prevCandle.v // + candle.v
+    const vSignal = volume > 14000 // && volume < 40000
     const pSignal = prevCandle.o < prevCandle.c && candle.o < candle.c && prevCandle.h <= candle.o // && prevCandle.h === prevCandle.c
     const dupSignal = state.lastOrderTime !== candle.time
 
@@ -138,12 +144,18 @@ async function onCandleUpdated(candle: CandleStreaming, prevCandle: CandleStream
       state.busy = true
       await cancelOrders()
       const stopLoss = await api.marketOrder({ figi, lots: state.getAvailableLots(), operation: 'Sell' })
-      logger.info(`Created Stop order @ ${candle.c}:`, stopLoss)
+      logger.info(`Created Stop order @ ${candle.c}`)
+      logger.debug(stopLoss)
     } catch (err) {
       logger.error("Unable to place Stop order:", err)
-      process.exit()
+      if (err.payload?.code === 'OrderBookException') { // TODO Types
+        logger.info(`Retrying...`)
+        state.busy = false
+      } else {
+        process.exit()
+      }
     } finally {
-      state.busy = false
+      // state.busy = false // FIXME
     }
   }
 }

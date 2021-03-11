@@ -241,13 +241,22 @@ if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
       positionCount: 0,
     };
 
+    let volume = 0
+
     data.forEach((candle, index, candles) => {
       if (index === 0) return
 
       if (state.assets === 0) {
         const prevCandle = candles[index - 1]
         const buyPrice = candle.o
-        if (candle.o > prevCandle.h && prevCandle.v > 10000 && prevCandle.v < 40000) {
+
+        // we know nothing about the candle at this point, except for candle.o
+        volume = prevCandle.v
+        // const vSignal = volume > 14000 && volume < 40000
+        const vSignal = volume > 3500 && volume < 5000
+        const pSignal = prevCandle.o < prevCandle.c && prevCandle.h <= candle.o
+        
+        if (pSignal && vSignal) {
           // BUY
           const assets = Math.floor(
             state.money / buyPrice / (1 + COMMISSION)
@@ -265,8 +274,8 @@ if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
       }
 
       if (state.assets > 0) {
-        const takeProfit = state.price + state.price * 0.06
-        const stopLoss = state.price - state.price * 0.01
+        const takeProfit = state.price * (1 + 0.075)
+        const stopLoss = state.price * (1 - 0.015)
         if (takeProfit <= candle.h) {
           // TAKE PROFIT
           const sum = fmtNumber(state.assets * takeProfit);

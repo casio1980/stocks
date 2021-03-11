@@ -32,25 +32,21 @@ const lots = 1
 type State = {
   busy: boolean,
   position?: PortfolioPosition
-  estimatedPrice?: number
+  estimatedPrice: number
+  lastStopLoss: number
   lastOrderTime?: string
-  reservedLots: number
   getAvailableLots: () => number | undefined
   getPrice: () => number | undefined
-  getTake: () => number | undefined
-  getStop: () => number | undefined
 }
 
 const state: State = {
   busy: false,
   position: undefined,
-  estimatedPrice: undefined,
+  estimatedPrice: 0,
+  lastStopLoss: 0,
   lastOrderTime: undefined,
-  reservedLots: 0,
-  getAvailableLots: function() { return (this.position?.lots || 0) - this.reservedLots },
-  getPrice: function() { return this.position?.averagePositionPrice?.value || this.estimatedPrice },
-  getTake: function() { return fmtNumber(this.getPrice() + 0.6) },
-  getStop: function() { return fmtNumber(this.getPrice() - 0.4) }
+  getAvailableLots: function() { return this.position?.lots || 0 },
+  getPrice: function() { return this.position ? this.position.averagePositionPrice?.value || this.estimatedPrice : undefined },
 }
 
 const updatePosition = async () => {
@@ -70,6 +66,10 @@ const updatePosition = async () => {
     logger.debug(state.position)
     if (state.position) {
       await createTakeOrder()
+    } else {
+      // Cleanup
+      state.estimatedPrice = 0
+      state.lastStopLoss = 0
     }
   }
 }
@@ -88,12 +88,13 @@ const cancelOrders = async () => {
 
 const createTakeOrder = async () => {
   await cancelOrders()
-  const takeProfit = await api.limitOrder({ figi, lots: state.getAvailableLots(), operation: 'Sell', price: state.getTake() })
-  logger.info(`Created Take order @ ${state.getTake()}`)
+  const price = fmtNumber(state.getPrice() + 0.7)
+  const takeProfit = await api.limitOrder({ figi, lots: state.getAvailableLots(), operation: 'Sell', price })
+  logger.info(`Created Take order @ ${price}`)
   logger.debug(takeProfit)
 }
 
-const waitForAveragePositionPrice = () => {}
+const waitForAveragePositionPrice = () => {} // TODO
 
 async function onCandleInitialized(candle: CandleStreaming, candles: CandleStreaming[]) {
   // await api.candlesGet({ figi, from, interval: '1min', to: candle.time })
@@ -103,7 +104,6 @@ async function onCandleInitialized(candle: CandleStreaming, candles: CandleStrea
   if (state.position) {
     logger.info(`There is an open position of ${state.position.lots} lots @ ${state.getPrice()}`)
     process.exit()
-    // state.reservedLots = state.position.lots
   }
 
   setInterval(async () => {
@@ -118,15 +118,14 @@ async function onCandleUpdated(candle: CandleStreaming, prevCandle: CandleStream
   if (state.busy) return
 
   if (state.getAvailableLots() === 0) {
-    const volume = prevCandle.v // + candle.v
+    const volume = prevCandle.v
     const vSignal = volume > 14000 // && volume < 40000
-    const pSignal = prevCandle.o < prevCandle.c && candle.o < candle.c && prevCandle.h <= candle.o // && prevCandle.h === prevCandle.c
+    // const vSignal = volume > 3500 && volume < 5000
+    const pSignal = prevCandle.o < prevCandle.c && candle.o < candle.c && prevCandle.h <= candle.o
     const dupSignal = state.lastOrderTime !== candle.time
 
     if (vSignal && pSignal && dupSignal) {
       state.estimatedPrice = candle.c
-      // logger.debug("prevCandle:", prevCandle)
-      // logger.debug("Candle:", candle)
 
       try {
         state.busy = true
@@ -139,7 +138,7 @@ async function onCandleUpdated(candle: CandleStreaming, prevCandle: CandleStream
         state.busy = false
       }
     }
-  } else if (state.getAvailableLots() > 0 && candle.c <= state.getStop()) {
+  } else if (state.getAvailableLots() > 0 && candle.c <= state.lastStopLoss) {
     try {
       state.busy = true
       await cancelOrders()
@@ -162,6 +161,17 @@ async function onCandleUpdated(candle: CandleStreaming, prevCandle: CandleStream
 
 async function onCandleChanged(candle: CandleStreaming, prevCandle: CandleStreaming, candles: CandleStreaming[]) {
   logger.info(prevCandle.time, '->', candle.time)
+
+  if (state.getAvailableLots() > 0) {
+    const initialStop = fmtNumber(state.getPrice() - 0.2)
+
+    const nCount = 10
+    const nCandles = candles.slice(Math.max(candles.length - nCount - 1, 0), candles.length - 1)
+    const nLow = nCandles.length === nCount ? Number(Math.min(...nCandles.map(c => c.l)).toFixed(1)) : 0
+
+    state.lastStopLoss = Math.max(state.lastStopLoss, nLow, initialStop)
+    logger.debug('Stop @', state.lastStopLoss)
+  }
 }
 
 (async function () {

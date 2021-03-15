@@ -165,7 +165,7 @@ async function onCandleChanged(candle: CandleStreaming, prevCandle: CandleStream
   if (state.getAvailableLots() > 0) {
     const initialStop = fmtNumber(state.getPrice() - 0.2)
 
-    const nCount = 10
+    const nCount = 25
     const nCandles = candles.slice(Math.max(candles.length - nCount - 1, 0), candles.length - 1)
     const nLow = nCandles.length === nCount ? Number(Math.min(...nCandles.map(c => c.l)).toFixed(1)) : 0
 

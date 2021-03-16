@@ -13,7 +13,7 @@ require("dotenv").config();
 log4js.configure({
   appenders: {
     console: { type: "console" },
-    file: { type: "file", filename: "robot.log" },
+    file: { type: "file", filename: "stocks.log" },
   },
   categories: {
     server: { appenders: ["file"], level: "trace" },

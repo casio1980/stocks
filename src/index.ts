@@ -94,8 +94,6 @@ const createTakeOrder = async () => {
   logger.debug(takeProfit)
 }
 
-const waitForAveragePositionPrice = () => {} // TODO
-
 async function onCandleInitialized(candle: CandleStreaming, candles: CandleStreaming[]) {
   // await api.candlesGet({ figi, from, interval: '1min', to: candle.time })
 
@@ -119,7 +117,7 @@ async function onCandleUpdated(candle: CandleStreaming, prevCandle: CandleStream
 
   if (state.getAvailableLots() === 0) {
     const volume = prevCandle.v
-    const vSignal = volume > 9000 // volume > 14000 // && volume < 40000
+    const vSignal = volume > 6000 // volume > 14000 // && volume < 40000
     // const vSignal = volume > 3500 && volume < 5000
     const pSignal = prevCandle.o < prevCandle.c && candle.o < candle.c && prevCandle.h <= candle.o
     const dupSignal = state.lastOrderTime !== candle.time
@@ -138,7 +136,7 @@ async function onCandleUpdated(candle: CandleStreaming, prevCandle: CandleStream
         state.busy = false
       }
     }
-  } else if (state.getAvailableLots() > 0 && candle.c <= state.lastStopLoss) {
+  } else if (state.getAvailableLots() > 0 && candle.c < state.lastStopLoss) {
     try {
       state.busy = true
       await cancelOrders()
@@ -165,7 +163,7 @@ async function onCandleChanged(candle: CandleStreaming, prevCandle: CandleStream
   if (state.getAvailableLots() > 0) {
     const initialStop = fmtNumber(state.getPrice() - 0.2)
 
-    const nCount = 25
+    const nCount = 32 // 25
     const nCandles = candles.slice(Math.max(candles.length - nCount - 1, 0), candles.length - 1)
     const nLow = nCandles.length === nCount ? Number(Math.min(...nCandles.map(c => c.l)).toFixed(1)) : 0
 

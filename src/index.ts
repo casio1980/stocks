@@ -27,7 +27,7 @@ const isProduction = process.env.PRODUCTION === "true";
 
 const api = getAPI();
 const figi = figiTWTR;
-const lots = 1
+const lots = 5
 
 type State = {
   busy: boolean,
@@ -117,7 +117,7 @@ async function onCandleUpdated(candle: CandleStreaming, prevCandle: CandleStream
 
   if (state.getAvailableLots() === 0) {
     const volume = prevCandle.v
-    const vSignal = volume > 6000 // volume > 14000 // && volume < 40000
+    const vSignal = volume > 9000 // volume > 14000 // && volume < 40000
     // const vSignal = volume > 3500 && volume < 5000
     const pSignal = prevCandle.o < prevCandle.c && candle.o < candle.c && prevCandle.h <= candle.o
     const dupSignal = state.lastOrderTime !== candle.time

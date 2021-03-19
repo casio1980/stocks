@@ -117,7 +117,7 @@ async function onCandleUpdated(candle: CandleStreaming, prevCandle: CandleStream
 
   if (state.getAvailableLots() === 0) {
     const volume = prevCandle.v
-    const vSignal = volume > 9000 // volume > 14000 // && volume < 40000
+    const vSignal = volume > 9000 // volume > 11000 // volume > 14000 // && volume < 40000
     // const vSignal = volume > 3500 && volume < 5000
     const pSignal = prevCandle.o < prevCandle.c && candle.o < candle.c && prevCandle.h <= candle.o
     const dupSignal = state.lastOrderTime !== candle.time
@@ -161,7 +161,7 @@ async function onCandleChanged(candle: CandleStreaming, prevCandle: CandleStream
   logger.info(prevCandle.time, '->', candle.time)
 
   if (state.getAvailableLots() > 0) {
-    const initialStop = fmtNumber(state.getPrice() - 0.2)
+    const initialStop = fmtNumber(state.getPrice() - 0.25) // 0.2
 
     const nCount = 32 // 25
     const nCandles = candles.slice(Math.max(candles.length - nCount - 1, 0), candles.length - 1)

@@ -1,12 +1,14 @@
 import { Candle, CandleResolution, CandleStreaming, PlacedMarketOrder, PortfolioPosition } from "@tinkoff/invest-openapi-js-sdk";
 import { EMA, MACD } from "technicalindicators";
 import { AvgLossInput } from "technicalindicators/declarations/Utils/AverageLoss";
-import { figiUSD, figiTWTR, figiFOLD, DATE_FORMAT } from "./const";
+import { figiUSD, figiTWTR, figiFOLD, DATE_FORMAT, STATUS_IDLE, STATUS_BUYING, STATUS_SELLING, STATUS_RETRY_SELLING } from "./const";
 import { fmtNumber } from "./lib/utils";
 import fs, { stat, Stats } from "fs";
 import getAPI from "./lib/api";
 import moment from "moment";
 import log4js from "log4js";
+import { Store } from "./store"
+import { autorun, reaction, when } from "mobx"
 
 require("dotenv").config();
 
@@ -29,6 +31,12 @@ const api = getAPI();
 const figi = figiTWTR;
 const lots = 1
 
+let positionUpdateInterval: NodeJS.Timeout = undefined
+
+const candles: CandleStreaming[] = []
+const store = new Store(candles)
+
+/*
 type State = {
   busy: boolean,
   position?: PortfolioPosition
@@ -48,7 +56,9 @@ const state: State = {
   getAvailableLots: function() { return this.position?.lots || 0 },
   getPrice: function() { return this.position ? this.position.averagePositionPrice?.value || this.estimatedPrice : undefined },
 }
+*/
 
+/*
 const updatePosition = async () => {
   const { positions } = await api.portfolio();
 
@@ -73,7 +83,8 @@ const updatePosition = async () => {
     }
   }
 }
-
+*/
+/*
 const cancelOrders = async () => {
   const orders = await api.orders()
   const orderIds = orders.filter(o => o.figi === figi).map(o => o.orderId)
@@ -85,7 +96,8 @@ const cancelOrders = async () => {
     }
   }
 }
-
+*/
+/*
 const createTakeOrder = async () => {
   await cancelOrders()
   const price = fmtNumber(state.getPrice() + 0.7)
@@ -93,87 +105,107 @@ const createTakeOrder = async () => {
   logger.info(`Created Take order @ ${price}`)
   logger.debug(takeProfit)
 }
+*/
+
+reaction(() => store.status, async (status) => {
+  logger.debug('Status set to:', status)
+
+  if ([STATUS_BUYING, STATUS_SELLING].includes(status)) {
+    positionUpdateInterval = setInterval(async () => {
+      const { positions } = await api.portfolio();
+      const position = positions.find((el) => el.figi === figi);
+      store.setPosition(position)
+    }, 10000)
+  }
+})
+
+reaction(() => store.position, async (position) => {
+  console.log('Position updated!')
+
+  if (store.status === STATUS_BUYING) {
+    if (position?.averagePositionPrice) {
+      store.setStatus(STATUS_IDLE)
+      clearInterval(positionUpdateInterval);
+    }
+  } else if (store.status === STATUS_SELLING) {
+    if (!position) {
+      store.setStatus(STATUS_IDLE)
+      clearInterval(positionUpdateInterval);
+    }
+  }
+})
 
 async function onCandleInitialized(candle: CandleStreaming, candles: CandleStreaming[]) {
   // await api.candlesGet({ figi, from, interval: '1min', to: candle.time })
 
   const { positions } = await api.portfolio();
-  state.position = positions.find((el) => el.figi === figi);
-  if (state.position) {
-    logger.info(`There is an open position of ${state.position.lots} lots @ ${state.getPrice()}`)
+  const position = positions.find((el) => el.figi === figi);
+  if (position) {
+    logger.info(`There is an open position of ${position.lots} lots, terminating`)
     process.exit()
   }
 
-  setInterval(async () => {
-    await updatePosition()
-  }, 30000)
+  // setInterval(async () => {
+  //   await updatePosition()
+  // }, 30000)
 
   logger.info('Started at', candle.time)
 }
 
 async function onCandleUpdated(candle: CandleStreaming, prevCandle: CandleStreaming | undefined, candles: CandleStreaming[]) {
   if (!prevCandle) return
-  if (state.busy) return
+  const { isIdle } = store
 
-  if (state.getAvailableLots() === 0) {
+  if (isIdle && !store.hasPosition) {
     const volume = prevCandle.v
     const vSignal = volume > 13000 // volume > 14000 // && volume < 40000
     // const vSignal = volume > 3500 && volume < 5000
     const deltaSignal = prevCandle.o <= prevCandle.c - 0.1
     const pSignal = prevCandle.h <= candle.o && candle.o < candle.c
-    const dupSignal = state.lastOrderTime !== candle.time
+    const dupSignal = store.buyTime !== candle.time
 
-    if (vSignal && deltaSignal && pSignal && dupSignal) {
-      state.estimatedPrice = candle.c
-
+     if (true /*vSignal && deltaSignal && pSignal && dupSignal*/) {
+      store.setStatus(STATUS_BUYING)
+      store.setBuyCandle(candle)
       try {
-        state.busy = true
         await api.marketOrder({ figi, lots, operation: 'Buy' })
       } catch (err) {
         logger.error("Unable to place Buy order:", err)
         process.exit()
-      } finally {
-        state.lastOrderTime = candle.time
-        state.busy = false
       }
     }
-  } else if (state.getAvailableLots() > 0 && candle.c < state.lastStopLoss) {
+  } else if (isIdle && store.hasPosition) { 
+    if (candle.h >= store.takePrice || candle.c < store.stopPrice ) {
+      store.setStatus(STATUS_SELLING)
+      try {
+        await api.marketOrder({ figi, lots: store.lotsAvailable, operation: 'Sell' })
+      } catch (err) {
+        logger.error("Unable to place Sell order:", err)
+        if (err.payload?.code === 'OrderBookException') { // TODO Types
+          logger.debug(`Retrying...`)
+          store.setStatus(STATUS_RETRY_SELLING)
+        } else {
+          process.exit()
+        }
+      }
+    }
+  } else if (store.status === STATUS_RETRY_SELLING) {
     try {
-      state.busy = true
-      await cancelOrders()
-      const stopLoss = await api.marketOrder({ figi, lots: state.getAvailableLots(), operation: 'Sell' })
-      logger.info(`Created Stop order @ ${candle.c}`)
-      logger.debug(stopLoss)
+      await api.marketOrder({ figi, lots: store.lotsAvailable, operation: 'Sell' })
+      store.setStatus(STATUS_SELLING)
     } catch (err) {
-      logger.error("Unable to place Stop order:", err)
+      logger.error("Unable to place Sell order:", err)
       if (err.payload?.code === 'OrderBookException') { // TODO Types
-        logger.info(`Retrying...`)
-        state.busy = false
+        logger.debug(`Retrying...`)
       } else {
         process.exit()
       }
-    } finally {
-      // state.busy = false // FIXME
     }
   }
 }
 
 async function onCandleChanged(candle: CandleStreaming, prevCandle: CandleStreaming, candles: CandleStreaming[]) {
   logger.info(prevCandle.time, '->', candle.time)
-
-  if (state.getAvailableLots() > 0) {
-    const orderCandleIndex = candles.findIndex(c => c.time === state.lastOrderTime)
-    const prevOrderCandle = candles[orderCandleIndex - 1]
-
-    const initialStop = fmtNumber(prevOrderCandle.o - 0.05) // 0.2
-
-    const nCount = 32 // 25
-    const nCandles = candles.slice(Math.max(candles.length - nCount - 1, 0), candles.length - 1)
-    const nLow = nCandles.length === nCount ? Number(Math.min(...nCandles.map(c => c.l)).toFixed(1)) : 0
-
-    state.lastStopLoss = Math.max(state.lastStopLoss, nLow, initialStop)
-    logger.debug('Stop @', state.lastStopLoss)
-  }
 }
 
 (async function () {
@@ -186,7 +218,6 @@ async function onCandleChanged(candle: CandleStreaming, prevCandle: CandleStream
   }
 
   try {
-    const candles: CandleStreaming[] = []
     let prevCandle: CandleStreaming
 
     const getLastCandle = () => (candles[candles.length - 1])
@@ -202,6 +233,7 @@ async function onCandleChanged(candle: CandleStreaming, prevCandle: CandleStream
         prevCandle = getLastCandle()
         candles.push(candle)
         onCandleChanged(candle, prevCandle, candles)
+        onCandleUpdated(candle, prevCandle, candles) // ?
       } else {
         candles[candles.length - 1] = candle
         onCandleUpdated(candle, prevCandle, candles)

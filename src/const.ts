@@ -7,3 +7,8 @@ export const DEFAULT_FROM_DATE = "2010-01-01";
 
 export const INITIAL_MONEY = 1000;
 export const COMMISSION = 0.0005; // 0.00025 after 200 000 rur // 0.003,
+
+export const STATUS_IDLE = 'STATUS_IDLE';
+export const STATUS_BUYING = 'STATUS_BUYING';
+export const STATUS_SELLING = 'STATUS_SELLING';
+export const STATUS_RETRY_SELLING = 'STATUS_RETRY_SELLING';

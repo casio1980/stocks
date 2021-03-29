@@ -1,4 +1,7 @@
 import { Candle } from "@tinkoff/invest-openapi-js-sdk";
+import { STATUS_IDLE, STATUS_BUYING, STATUS_SELLING, STATUS_RETRY_SELLING } from './const'
+
+declare type Status = typeof STATUS_IDLE | typeof STATUS_BUYING | typeof STATUS_SELLING | typeof STATUS_RETRY_SELLING
 
 declare type State = {
   assets: number

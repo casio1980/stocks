@@ -1,14 +1,11 @@
-import { Candle, CandleResolution, CandleStreaming, PlacedMarketOrder, PortfolioPosition } from "@tinkoff/invest-openapi-js-sdk";
+import { CandleStreaming } from "@tinkoff/invest-openapi-js-sdk";
 import { EMA, MACD } from "technicalindicators";
 import { AvgLossInput } from "technicalindicators/declarations/Utils/AverageLoss";
-import { figiUSD, figiTWTR, figiFOLD, DATE_FORMAT, STATUS_IDLE, STATUS_BUYING, STATUS_SELLING, STATUS_RETRY_SELLING } from "./const";
-import { fmtNumber } from "./lib/utils";
-import fs, { stat, Stats } from "fs";
+import { figiTWTR, STATUS_IDLE, STATUS_BUYING, STATUS_SELLING, STATUS_RETRY_SELLING } from "./const";
 import getAPI from "./lib/api";
-import moment from "moment";
 import log4js from "log4js";
 import { Store } from "./store"
-import { autorun, reaction, when } from "mobx"
+import { reaction } from "mobx"
 
 require("dotenv").config();
 
@@ -35,77 +32,6 @@ let positionUpdateInterval: NodeJS.Timeout = undefined
 
 const candles: CandleStreaming[] = []
 const store = new Store(candles)
-
-/*
-type State = {
-  busy: boolean,
-  position?: PortfolioPosition
-  estimatedPrice: number
-  lastStopLoss: number
-  lastOrderTime?: string
-  getAvailableLots: () => number | undefined
-  getPrice: () => number | undefined
-}
-
-const state: State = {
-  busy: false,
-  position: undefined,
-  estimatedPrice: 0,
-  lastStopLoss: 0,
-  lastOrderTime: undefined,
-  getAvailableLots: function() { return this.position?.lots || 0 },
-  getPrice: function() { return this.position ? this.position.averagePositionPrice?.value || this.estimatedPrice : undefined },
-}
-*/
-
-/*
-const updatePosition = async () => {
-  const { positions } = await api.portfolio();
-
-  const oldLots = state.getAvailableLots()
-  const oldPrice = state.getPrice()
-  state.position = positions.find((el) => el.figi === figi);
-
-  if (state.busy && !state.position) {
-    // FIXME dirty hack
-    state.busy = false
-  }
-
-  if (oldLots !== state.getAvailableLots() || oldPrice !== state.getPrice()) {
-    logger.info(`Position update, price: ${oldPrice} -> ${state.getPrice()}`)
-    logger.debug(state.position)
-    if (state.position) {
-      await createTakeOrder()
-    } else {
-      // Cleanup
-      state.estimatedPrice = 0
-      state.lastStopLoss = 0
-    }
-  }
-}
-*/
-/*
-const cancelOrders = async () => {
-  const orders = await api.orders()
-  const orderIds = orders.filter(o => o.figi === figi).map(o => o.orderId)
-
-  if (orderIds.length > 0) {
-    logger.info('Cancelling old orders...')
-    for (const orderId of orderIds) {
-      await api.cancelOrder({ orderId })
-    }
-  }
-}
-*/
-/*
-const createTakeOrder = async () => {
-  await cancelOrders()
-  const price = fmtNumber(state.getPrice() + 0.7)
-  const takeProfit = await api.limitOrder({ figi, lots: state.getAvailableLots(), operation: 'Sell', price })
-  logger.info(`Created Take order @ ${price}`)
-  logger.debug(takeProfit)
-}
-*/
 
 reaction(() => store.status, async (status) => {
   logger.debug('Status set to:', status)
@@ -135,7 +61,7 @@ reaction(() => store.position, async (position) => {
   }
 })
 
-async function onCandleInitialized(candle: CandleStreaming, candles: CandleStreaming[]) {
+async function onCandleInitialized(candle: CandleStreaming) {
   // await api.candlesGet({ figi, from, interval: '1min', to: candle.time })
 
   const { positions } = await api.portfolio();
@@ -152,7 +78,7 @@ async function onCandleInitialized(candle: CandleStreaming, candles: CandleStrea
   logger.info('Started at', candle.time)
 }
 
-async function onCandleUpdated(candle: CandleStreaming, prevCandle: CandleStreaming | undefined, candles: CandleStreaming[]) {
+async function onCandleUpdated(candle: CandleStreaming, prevCandle?: CandleStreaming) {
   if (!prevCandle) return
   const { isIdle } = store
 
@@ -204,7 +130,7 @@ async function onCandleUpdated(candle: CandleStreaming, prevCandle: CandleStream
   }
 }
 
-async function onCandleChanged(candle: CandleStreaming, prevCandle: CandleStreaming, candles: CandleStreaming[]) {
+async function onCandleChanged(candle: CandleStreaming, prevCandle: CandleStreaming) {
   logger.info(prevCandle.time, '->', candle.time)
 }
 
@@ -225,18 +151,18 @@ async function onCandleChanged(candle: CandleStreaming, prevCandle: CandleStream
     api.candle({ figi, interval: "1min" }, async candle => {
       if (!getLastCandle()) {
         candles.push(candle)
-        onCandleInitialized(candle, candles)
+        onCandleInitialized(candle)
         return
       }
 
       if (getLastCandle().time !== candle.time) {
         prevCandle = getLastCandle()
         candles.push(candle)
-        onCandleChanged(candle, prevCandle, candles)
-        onCandleUpdated(candle, prevCandle, candles) // ?
+        onCandleChanged(candle, prevCandle)
+        onCandleUpdated(candle, prevCandle) // ?
       } else {
         candles[candles.length - 1] = candle
-        onCandleUpdated(candle, prevCandle, candles)
+        onCandleUpdated(candle, prevCandle)
       }
     });
 

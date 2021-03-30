@@ -34,8 +34,6 @@ const candles: CandleStreaming[] = []
 const store = new Store(candles)
 
 reaction(() => store.status, async (status) => {
-  logger.debug('Status set to:', status)
-
   if ([STATUS_BUYING, STATUS_SELLING].includes(status)) {
     positionUpdateInterval = setInterval(async () => {
       const { positions } = await api.portfolio();
@@ -46,8 +44,6 @@ reaction(() => store.status, async (status) => {
 })
 
 reaction(() => store.position, async (position) => {
-  console.log('Position updated!')
-
   if (store.status === STATUS_BUYING) {
     if (position?.averagePositionPrice) {
       store.setStatus(STATUS_IDLE)
@@ -61,19 +57,30 @@ reaction(() => store.position, async (position) => {
   }
 })
 
+reaction(() => store.buyPrice, async (price) => {
+  console.log('Buy price is:', price)
+})
+reaction(() => store.takePrice, async (price) => {
+  console.log('Take price is:', price)
+})
+reaction(() => store.stopPrice, async (price) => {
+  console.log('Stop price is:', price)
+})
+
+reaction(() => store.prevCandle, async (candle) => {
+  console.log('prevCandle changed', JSON.stringify(candle))
+})
+
 async function onCandleInitialized(candle: CandleStreaming) {
   // await api.candlesGet({ figi, from, interval: '1min', to: candle.time })
 
   const { positions } = await api.portfolio();
   const position = positions.find((el) => el.figi === figi);
+  store.setPosition(position)
   if (position) {
     logger.info(`There is an open position of ${position.lots} lots, terminating`)
     process.exit()
   }
-
-  // setInterval(async () => {
-  //   await updatePosition()
-  // }, 30000)
 
   logger.info('Started at', candle.time)
 }
@@ -90,7 +97,7 @@ async function onCandleUpdated(candle: CandleStreaming, prevCandle?: CandleStrea
     const pSignal = prevCandle.h <= candle.o && candle.o < candle.c
     const dupSignal = store.buyTime !== candle.time
 
-     if (true /*vSignal && deltaSignal && pSignal && dupSignal*/) {
+     if (vSignal && deltaSignal && pSignal && dupSignal) {
       store.setStatus(STATUS_BUYING)
       store.setBuyCandle(candle)
       try {

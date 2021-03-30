@@ -1,5 +1,5 @@
 import { Status } from './types'
-import { makeAutoObservable, makeObservable, observable, action, computed } from "mobx"
+import { makeAutoObservable } from "mobx"
 import { CandleStreaming, PortfolioPosition } from "@tinkoff/invest-openapi-js-sdk";
 import { fmtNumber } from "./lib/utils";
 import { STATUS_IDLE } from "./const";
@@ -9,29 +9,13 @@ export class Store {
   position?: PortfolioPosition = undefined
   buyCandle?: CandleStreaming = undefined
 
-  candles: CandleStreaming[] = undefined
+  candles: CandleStreaming[] = []
 
   constructor(candles: CandleStreaming[]) {
-    // makeAutoObservable(this)
-    makeObservable(this, {
-      candles: observable.ref,
-
-      status: observable,
-      position: observable,
-      buyCandle: observable,
-
-      isIdle: computed,
-      hasPosition: computed,
-      lotsAvailable: computed,
-      buyTime: computed,
-      buyPrice: computed,
-      takePrice: computed,
-      stopPrice: computed,
-
-      setStatus: action,
-      setPosition: action,
-      setBuyCandle: action
+    makeAutoObservable(this, {
+      candles: false
     })
+
     this.candles = candles
   }
 
@@ -56,21 +40,41 @@ export class Store {
   }
 
   get takePrice() {
+    if (!this.buyPrice) return
     return fmtNumber(this.buyPrice + 0.7)
   }
 
   get stopPrice() {
-    const { candles, buyTime } = this
-    const buyCandleIndex = candles.findIndex(c => c.time === buyTime)
-    const prevBuyCandle = candles[buyCandleIndex - 1]
+    const { candles, prevCandle } = this
 
-    const initialStop = fmtNumber(prevBuyCandle.o - 0.05) // 0.2
+    if (!prevCandle) return
+    const initialStop = prevCandle.o - 0.05 // 0.2
 
-    const nCount = 32 // 25
+    const nCount = 1 // 32 // 25
     const nCandles = candles.slice(Math.max(candles.length - nCount - 1, 0), candles.length - 1)
     const nLow = nCandles.length === nCount ? Number(Math.min(...nCandles.map(c => c.l)).toFixed(1)) : 0 // TODO fmtNumber
 
-    return Math.max(nLow, initialStop)
+    return fmtNumber(Math.max(nLow, initialStop))
+
+    // const { candles, buyTime } = this
+    // const buyCandleIndex = candles.findIndex(c => c.time === buyTime)
+    // if (buyCandleIndex <= 0) return undefined
+
+    // const prevBuyCandle = candles[buyCandleIndex - 1]
+    // const initialStop = fmtNumber(prevBuyCandle.o - 0.05) // 0.2
+
+    // const nCount = 32 // 25
+    // const nCandles = candles.slice(Math.max(candles.length - nCount - 1, 0), candles.length - 1)
+    // const nLow = nCandles.length === nCount ? Number(Math.min(...nCandles.map(c => c.l)).toFixed(1)) : 0 // TODO fmtNumber
+
+    // return Math.max(nLow, initialStop)
+  }
+
+  get prevCandle() {
+    const { candles, buyTime } = this
+    const buyCandleIndex = candles.findIndex(c => c.time === buyTime)
+
+    return buyCandleIndex > 0 ? candles[buyCandleIndex - 1] : undefined
   }
 
   setStatus(status: Status) {

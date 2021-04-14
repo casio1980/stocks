@@ -4,4 +4,6 @@
 
 1. Download: yarn download
 
-2. Robot: yarn robot
+2. Analysis: yarn robot (to rename)
+
+3. Robot: yarn serve

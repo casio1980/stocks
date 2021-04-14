@@ -91,10 +91,9 @@ async function onCandleUpdated(candle: CandleStreaming, prevCandle?: CandleStrea
 
   if (isIdle && !store.hasPosition) {
     const volume = prevCandle.v
-    const vSignal = volume > 13000 // volume > 14000 // && volume < 40000
-    // const vSignal = volume > 3500 && volume < 5000
-    const deltaSignal = prevCandle.o <= prevCandle.c - 0.1
-    const pSignal = prevCandle.h <= candle.o && candle.o < candle.c
+    const vSignal = volume > 1300
+    const deltaSignal = true // prevCandle.o <= prevCandle.c - 0.09
+    const pSignal = prevCandle.h < candle.o && candle.o < candle.c
     const dupSignal = store.buyTime !== candle.time
 
      if (vSignal && deltaSignal && pSignal && dupSignal) {

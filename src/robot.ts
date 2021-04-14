@@ -11,23 +11,12 @@ import {
 import { info } from "./lib/logger";
 import fs from "fs";
 import getAPI from "./lib/api";
-import { loadData } from "./lib/utils";
+import { fmtNumber, isRegularMarket, loadData } from "./lib/utils";
 import moment from "moment";
 
 require("dotenv").config();
 
 const api = getAPI();
-
-const fmtNumber = (num: number) => +num.toFixed(2);
-
-const isRegularMarket = (date: string) => {
-  const d = new Date(date);
-  return d.getHours() * 60 + d.getMinutes() >= 17 * 60 + 30;
-};
-const isClosingMarket = (date: string) => {
-  const d = new Date(date);
-  return d.getHours() * 60 + d.getMinutes() >= 23 * 60 + 30;
-};
 
 const figiName = "twtr";
 const figi = figiTWTR;
@@ -252,11 +241,26 @@ if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
 
         // we know nothing about the candle at this point, except for candle.o
         volume = prevCandle.v
-        // const vSignal = volume > 14000 && volume < 40000
-        const vSignal = volume > 3500 && volume < 5000
-        const pSignal = prevCandle.o < prevCandle.c && prevCandle.h <= candle.o
+        // for (1 + 0.09) / (1 - 0.011)
+        // { assets: 0, money: 3887.4, positionCount: 306, price: undefined }
+        const vSignal = volume > 1300
+        const deltaSignal = true
+        const pSignal = prevCandle.h < candle.o && candle.o < candle.c
+
+        // for 0.7 / 0.2
+        // { assets: 0, money: 2949.93, positionCount: 1206, price: undefined }
+        // const vSignal = volume > 1300
+        // const deltaSignal = true
+        // const pSignal = prevCandle.h < candle.o && candle.o < candle.c
+
+        // // const vSignal = volume > 14000 && volume < 40000
+        // // const vSignal = volume > 3500 && volume < 5000
+        // const vSignal = volume > 1300
+        // const deltaSignal = true // prevCandle.o <= prevCandle.c - 0.09
+        // // const pSignal = prevCandle.o < prevCandle.c && prevCandle.h <= candle.o
+        // const pSignal = prevCandle.h < candle.o && candle.o < candle.c
         
-        if (pSignal && vSignal) {
+        if (pSignal && deltaSignal && vSignal) {
           // BUY
           const assets = Math.floor(
             state.money / buyPrice / (1 + COMMISSION)
@@ -275,7 +279,9 @@ if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
 
       if (state.assets > 0) {
         const takeProfit = state.price * (1 + 0.075)
-        const stopLoss = state.price * (1 - 0.015)
+        const stopLoss = state.price * (1 - 0.011)
+        // const takeProfit = state.price + 0.7
+        // const stopLoss = state.price - 0.2
         if (takeProfit <= candle.h) {
           // TAKE PROFIT
           const sum = fmtNumber(state.assets * takeProfit);

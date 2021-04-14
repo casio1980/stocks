@@ -41,20 +41,23 @@ export class Store {
 
   get takePrice() {
     if (!this.buyPrice) return
-    return fmtNumber(this.buyPrice + 0.7)
+    return fmtNumber(this.buyPrice * (1 + 0.075))
   }
 
   get stopPrice() {
-    const { candles, prevCandle } = this
+    if (!this.buyPrice) return
+    return fmtNumber(this.buyPrice * (1 - 0.011))
 
-    if (!prevCandle) return
-    const initialStop = prevCandle.o - 0.05 // 0.2
+    // const { candles, prevCandle } = this
 
-    const nCount = 1 // 32 // 25
-    const nCandles = candles.slice(Math.max(candles.length - nCount - 1, 0), candles.length - 1)
-    const nLow = nCandles.length === nCount ? Number(Math.min(...nCandles.map(c => c.l)).toFixed(1)) : 0 // TODO fmtNumber
+    // if (!prevCandle) return
+    // const initialStop = prevCandle.o - 0.05 // 0.2
 
-    return fmtNumber(Math.max(nLow, initialStop))
+    // const nCount = 1 // 32 // 25
+    // const nCandles = candles.slice(Math.max(candles.length - nCount - 1, 0), candles.length - 1)
+    // const nLow = nCandles.length === nCount ? Number(Math.min(...nCandles.map(c => c.l)).toFixed(1)) : 0 // TODO fmtNumber
+
+    // return fmtNumber(Math.max(nLow, initialStop))
 
     // const { candles, buyTime } = this
     // const buyCandleIndex = candles.findIndex(c => c.time === buyTime)

@@ -7,7 +7,9 @@
     "build-ts": "tsc",
     "build": "npm run build-ts",
     "download": "node dist/download.js",
+    "history": "node dist/history.js",
     "robot": "node dist/robot.js",
+    "macd": "node dist/macd.js",
     "serve": "node dist/index.js",
     "start": "npm run robot",
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -24,7 +26,7 @@
     "typescript": "^3.9.6"
   },
   "dependencies": {
-    "@tinkoff/invest-openapi-js-sdk": "1.2.17",
+    "@tinkoff/invest-openapi-js-sdk": "1.5.0",
     "dotenv": "8.2.0",
     "log4js": "6.3.0",
     "mobx": "6.1.8",

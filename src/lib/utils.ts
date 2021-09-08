@@ -1,6 +1,10 @@
 import fs from "fs";
 import { Candle } from "@tinkoff/invest-openapi-js-sdk";
 
+export function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 export function fmtNumber(number: any) { return +number.toFixed(2); }
 
 export function isRegularMarket(date: string) {

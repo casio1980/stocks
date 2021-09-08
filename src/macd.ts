@@ -21,7 +21,7 @@ const api = getAPI();
 const figiName = "twtr";
 const figi = figiTWTR;
 
-const skip = ['VRSB']
+// const skip = ['VRSB']
 
 if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
 

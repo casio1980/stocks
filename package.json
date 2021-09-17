@@ -11,7 +11,7 @@
     "robot": "node dist/robot.js",
     "macd": "node dist/macd.js",
     "serve": "node dist/index.js",
-    "start": "npm run robot",
+    "start": "npm run serve",
     "test": "echo \"Error: no test specified\" && exit 1",
     "watch-node": "nodemon dist/robot.js",
     "watch-ts": "tsc -w",

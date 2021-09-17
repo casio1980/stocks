@@ -1,0 +1,124 @@
+  const simpleBuyFactory: DecisionFactory = () => [
+    // {
+    //   name: "Buy when OPEN > CLOSE",
+    //   func: ({ state, candle, index, candles }) => {
+    //     const { assets } = state;
+    //     const { o: price } = candle;
+    //     if (assets === 0 && index > 0 && price > candles[index - 1].c) {
+    //       return price;
+    //     }
+    //   },
+    // },
+    {
+      name: "Buy when OPEN >>> CLOSE",
+      func: ({ state, candle, index, candles }) => {
+        const { assets } = state;
+        const { o: price } = candle;
+        if (assets === 0 && index > 0 && price > candles[index - 1].c + 0.01) {
+          return price;
+        }
+      },
+    },    
+    // {
+    //   name: "Buy when OPEN > HIGH",
+    //   func: (
+    //     state: State,
+    //     candle: Candle,
+    //     index: number,
+    //     candles: Candle[]
+    //   ) => {
+    //     const { assets } = state;
+    //     const { o: price } = candle;
+    //     if (assets === 0 && index > 0 && price > candles[index - 1].h) {
+    //       return price;
+    //     }
+    //   },
+    // },
+  ];
+
+  const regularMarketBuy: Decision = {
+    name: "Buy on Regular market",
+    func: ({ state, candle }) => {
+      const { assets } = state;
+      const { time, o: price } = candle;
+      if (assets === 0 && isRegularMarket(time)) {
+        return price;
+      }
+    },
+  };
+
+  const takeProfitSellFactory: DecisionFactory = (profits: number[]) =>
+    profits.map((profit) => {
+      return {
+        name: `Sell when PROFIT = ${profit}`,
+        func: ({ state, candle }) => {
+          const { assets } = state;
+          if (assets > 0 && candle.h >= state.price * profit) {
+            return state.price * profit;
+          }
+        },
+      };
+    });
+
+  // const marketCloseSell: Decision = {
+  //   name: "Sell at market close",
+  //   func: ({ state, candle }) => {
+  //     const { assets } = state;
+  //     const { time, o: price } = candle;
+  //     if (assets > 0 && isClosingMarket(time)) {
+  //       return price;
+  //     }
+  //   },
+  // };
+
+  const buyStrategies = [...simpleBuyFactory(), regularMarketBuy]
+    .map((s, index, arr) => {
+      return [
+        s,
+        arr
+          .filter((item) => item !== s)
+          .map((item) => ({
+            name: `${s.name} && ${item.name}`,
+            func: (params: DecisionFuncParams) =>
+              s.func(params) && item.func(params),
+          })),
+      ].flat();
+    })
+    .flat();
+  // const sellStrategies = [
+  //   ...takeProfitSellFactory([1 + COMMISSION * 2]),
+  //   marketCloseSell,
+  // ];
+
+  // const buyStrategies = [regularMarketBuy];
+  const sellStrategies = [
+    ...takeProfitSellFactory([
+      1 + COMMISSION * 3,
+      1 + COMMISSION * 4,
+      1 + COMMISSION * 5,
+      1 + COMMISSION * 6,
+      1 + COMMISSION * 7,
+      1 + COMMISSION * 8,
+      1 + COMMISSION * 9,
+      1 + COMMISSION * 10,
+      1 + COMMISSION * 11,
+      1 + COMMISSION * 12,
+      1 + COMMISSION * 13,
+      1 + COMMISSION * 14,
+      1 + COMMISSION * 15,
+      1 + COMMISSION * 16,
+      1 + COMMISSION * 17,
+      1 + COMMISSION * 18,
+      1 + COMMISSION * 19,
+      1 + COMMISSION * 20,
+      1 + COMMISSION * 21,
+      1 + COMMISSION * 22,
+      1 + COMMISSION * 23,
+      1 + COMMISSION * 24,
+      1 + COMMISSION * 25,
+    ]),
+  ];
+
+  const strategies = buyStrategies
+    .map((buy) => sellStrategies.map((sell) => ({ buy, sell })))
+    .flat();

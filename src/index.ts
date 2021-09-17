@@ -1,11 +1,11 @@
-import { CandleStreaming } from "@tinkoff/invest-openapi-js-sdk";
-import { EMA, MACD } from "technicalindicators";
-import { AvgLossInput } from "technicalindicators/declarations/Utils/AverageLoss";
-import { figiTWTR, STATUS_IDLE, STATUS_BUYING, STATUS_SELLING, STATUS_RETRY_SELLING } from "./const";
+import { CandleStreamingMacd } from "./types";
+import { MACD } from "technicalindicators";
+import { figiTWTR, STATUS_IDLE, STATUS_BUYING, STATUS_SELLING, STATUS_RETRY_SELLING, DATE_FORMAT } from "./const";
 import getAPI from "./lib/api";
 import log4js from "log4js";
 import { Store } from "./store"
 import { reaction } from "mobx"
+import moment from "moment";
 
 require("dotenv").config();
 
@@ -26,12 +26,12 @@ const isProduction = process.env.PRODUCTION === "true";
 
 const api = getAPI();
 const figi = figiTWTR;
-const lots = 1
+const lots = 10
 
 let positionUpdateInterval: NodeJS.Timeout = undefined
 
-const candles: CandleStreaming[] = []
-const store = new Store(candles)
+const candles: CandleStreamingMacd[] = []
+const store = new Store()
 
 reaction(() => store.status, async (status) => {
   if ([STATUS_BUYING, STATUS_SELLING].includes(status)) {
@@ -57,8 +57,17 @@ reaction(() => store.position, async (position) => {
   }
 })
 
+reaction(() => store.lots, async (lots) => {
+  console.log('Lots available:', lots)
+})
+// reaction(() => store.positionPrice, async (price) => {
+//   console.log('Position price:', price)
+// })
 reaction(() => store.buyPrice, async (price) => {
   console.log('Buy price is:', price)
+})
+reaction(() => store.noProfitPrice, async (price) => {
+  console.log('No profit price is:', price)
 })
 reaction(() => store.takePrice, async (price) => {
   console.log('Take price is:', price)
@@ -66,28 +75,27 @@ reaction(() => store.takePrice, async (price) => {
 reaction(() => store.stopPrice, async (price) => {
   console.log('Stop price is:', price)
 })
+// reaction(() => store.prevCandle, async (candle) => {
+//   console.log('prevCandle changed', JSON.stringify(candle))
+// })
 
-reaction(() => store.prevCandle, async (candle) => {
-  console.log('prevCandle changed', JSON.stringify(candle))
-})
-
-async function onCandleInitialized(candle: CandleStreaming) {
-  // await api.candlesGet({ figi, from, interval: '1min', to: candle.time })
-
+async function onCandleInitialized(candle: CandleStreamingMacd) {
   const { positions } = await api.portfolio();
   const position = positions.find((el) => el.figi === figi);
   store.setPosition(position)
-  if (position) {
-    logger.info(`There is an open position of ${position.lots} lots, terminating`)
-    process.exit()
-  }
+  // if (position) {
+    // logger.info(`There is an open position of ${position.lots} lots, terminating`)
+    // process.exit()
+  // }
 
   logger.info('Started at', candle.time)
 }
 
-async function onCandleUpdated(candle: CandleStreaming, prevCandle?: CandleStreaming) {
-  if (!prevCandle) return
+async function onCandleUpdated(candle: CandleStreamingMacd, prevCandle: CandleStreamingMacd) {
   const { isIdle } = store
+
+  // const { macd } = candle
+  // console.log(macd.MACD, macd.signal, macd.histogram)
 
   if (isIdle && !store.hasPosition) {
     const volume = prevCandle.v
@@ -110,7 +118,7 @@ async function onCandleUpdated(candle: CandleStreaming, prevCandle?: CandleStrea
     if (candle.h >= store.takePrice || candle.c < store.stopPrice ) {
       store.setStatus(STATUS_SELLING)
       try {
-        await api.marketOrder({ figi, lots: store.lotsAvailable, operation: 'Sell' })
+        await api.marketOrder({ figi, lots: store.lots, operation: 'Sell' })
       } catch (err) {
         logger.error("Unable to place Sell order:", err)
         if (err.payload?.code === 'OrderBookException') { // TODO Types
@@ -123,7 +131,7 @@ async function onCandleUpdated(candle: CandleStreaming, prevCandle?: CandleStrea
     }
   } else if (store.status === STATUS_RETRY_SELLING) {
     try {
-      await api.marketOrder({ figi, lots: store.lotsAvailable, operation: 'Sell' })
+      await api.marketOrder({ figi, lots: store.lots, operation: 'Sell' })
       store.setStatus(STATUS_SELLING)
     } catch (err) {
       logger.error("Unable to place Sell order:", err)
@@ -136,8 +144,30 @@ async function onCandleUpdated(candle: CandleStreaming, prevCandle?: CandleStrea
   }
 }
 
-async function onCandleChanged(candle: CandleStreaming, prevCandle: CandleStreaming) {
+async function onCandleChanged(candle: CandleStreamingMacd, prevCandle: CandleStreamingMacd) {
   logger.info(prevCandle.time, '->', candle.time)
+}
+
+function calculateMACD(candles: CandleStreamingMacd[]): CandleStreamingMacd[] {
+  const fastPeriod = 12;
+  const slowPeriod = 26;
+  // const fastOffset = fastPeriod - 1;
+  const slowOffset = slowPeriod - 1;
+  const values = candles.map(({ c }) => c);
+
+  const macd = MACD.calculate({
+    values,
+    fastPeriod,
+    slowPeriod,
+    signalPeriod: 9,
+    SimpleMAOscillator: false,
+    SimpleMASignal: false,
+  });
+
+  return candles.map((c, i) => ({
+    ...c,
+    macd: macd[i - slowOffset],
+  }));
 }
 
 (async function () {
@@ -150,67 +180,46 @@ async function onCandleChanged(candle: CandleStreaming, prevCandle: CandleStream
   }
 
   try {
-    let prevCandle: CandleStreaming
+    let prevCandle: CandleStreamingMacd
 
     const getLastCandle = () => (candles[candles.length - 1])
+    const getPrevCandle = () => (candles[candles.length - 2])
 
     api.candle({ figi, interval: "1min" }, async candle => {
       if (!getLastCandle()) {
-        candles.push(candle)
-        onCandleInitialized(candle)
+        // loading history from the start of the day
+        const { candles: history } = await api.candlesGet({
+          figi,
+          from: `${moment(candle.time).startOf("day").format(DATE_FORMAT)}T00:00:00Z`,
+          to: candle.time,
+          interval: '1min'
+        })
+
+        candles.push(...calculateMACD([...history, candle]))
+        prevCandle = getPrevCandle()
+
+        onCandleInitialized(getLastCandle())
         return
       }
 
       if (getLastCandle().time !== candle.time) {
-        prevCandle = getLastCandle()
         candles.push(candle)
-        onCandleChanged(candle, prevCandle)
-        onCandleUpdated(candle, prevCandle) // ?
+        prevCandle = getPrevCandle()
+
+        const macd = calculateMACD(candles)
+        candles[candles.length - 1].macd = macd[macd.length - 1].macd
+
+        onCandleChanged(getLastCandle(), prevCandle)
+        onCandleUpdated(getLastCandle(), prevCandle) // ?
       } else {
         candles[candles.length - 1] = candle
-        onCandleUpdated(candle, prevCandle)
+
+        const macd = calculateMACD(candles)
+        candles[candles.length - 1].macd = macd[macd.length - 1].macd
+
+        onCandleUpdated(getLastCandle(), prevCandle)
       }
     });
-
-    /*
-    const from = `${moment().startOf("year").format(DATE_FORMAT)}T00:00:00Z`;
-    const to = `${moment().add(1, "days").format(DATE_FORMAT)}T00:00:00Z`;
-    const { candles } = await api.candlesGet({
-      from,
-      to,
-      figi: figiTWTR,
-      interval,
-    });
-    fs.writeFileSync(filename, JSON.stringify(candles), "utf8");
-    */
-
-    /*
-    const twtr = JSON.parse(fs.readFileSync(filename, "utf8")) as Candle[];
-
-    const fastPeriod = 12;
-    const slowPeriod = 26;
-    const fastOffset = fastPeriod - 1;
-    const slowOffset = slowPeriod - 1;
-    const values = twtr.map(({ c }) => c);
-
-    const ema = EMA.calculate({ values, period: fastPeriod });
-    const macd = MACD.calculate({
-      values,
-      fastPeriod,
-      slowPeriod,
-      signalPeriod: 9,
-      SimpleMAOscillator: false,
-      SimpleMASignal: false,
-    });
-
-    const result = twtr.map((item, i) => ({
-      ...item,
-      ema: ema[i - fastOffset],
-      macd: macd[i - slowOffset],
-    }));
-
-    console.log(">", result);
-    */
   } catch (err) {
     logger.fatal(err);
   }

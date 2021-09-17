@@ -1,400 +1,138 @@
-import { Candle, CandleResolution } from "@tinkoff/invest-openapi-js-sdk";
-import { State, Decision, DecisionFuncParams, DecisionFactory } from './types'
-import { EMA, MACD } from "technicalindicators";
 import {
-  figiUSD,
   figiTWTR,
-  DATE_FORMAT,
   INITIAL_MONEY,
   COMMISSION,
 } from "./const";
 import { info } from "./lib/logger";
-import fs from "fs";
 import getAPI from "./lib/api";
 import { fmtNumber, isRegularMarket, loadData } from "./lib/utils";
-import moment from "moment";
+import { Store } from "./store"
 
 require("dotenv").config();
 
 const api = getAPI();
 
+const currency = "USD";
 const figiName = "twtr";
 const figi = figiTWTR;
 
-let state: State;
-
-const channel = {
-  p1: { date: "2020-06-23", price: 68.55 },
-  p2: { date: "2020-07-22", price: 70.59 },
-  height: 2.68,
-};
-
-// const calcChannel = ({ p1, p2, height }, date) => {
-//   const date1 = moment(p1.date);
-//   const date2 = moment(p2.date);
-//   const delta = (p2.price - p1.price) / date2.diff(date1, "days");
-
-//   const days = moment(date).diff(date1, "days");
-//   const l = p1.price + delta * days;
-//   return { l, h: l + height };
-// };
+const store = new Store()
 
 if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
-
-/*
-(async function () {
-  try {
-    // api.candle({ figi, interval }, (candle) => {
-    //   const { o, c, h, l, v, time } = candle;
-    //   // const date = moment(time).format(DATE_FORMAT);
-    //   info(calcChannel(channel, "2020-07-10"));
-    // });
-
-    /*
-    const portfolio = await api.portfolio();
-    const { positions } = portfolio;
-
-    const usd = positions.find((el) => el.figi === figiUSD);
-    info(positions);
-    */
-
-    /*
-    const twtr = JSON.parse(fs.readFileSync(filename, "utf8")) as Candle[];
-
-    const fastPeriod = 12;
-    const slowPeriod = 26;
-    const fastOffset = fastPeriod - 1;
-    const slowOffset = slowPeriod - 1;
-    const values = twtr.map(({ c }) => c);
-
-    const ema = EMA.calculate({ values, period: fastPeriod });
-    const macd = MACD.calculate({
-      values,
-      fastPeriod,
-      slowPeriod,
-      signalPeriod: 9,
-      SimpleMAOscillator: false,
-      SimpleMASignal: false,
-    });
-
-    const result = twtr.map((item, i) => ({
-      ...item,
-      ema: ema[i - fastOffset],
-      macd: macd[i - slowOffset],
-    }));
-
-    info(">", result);
-  } catch (err) {
-    info("FATAL", err);
-  }
-})();
-*/
 
 //
 // FIND BEST STRATEGY ROUTINE
 //
 (async function () {
-  const simpleBuyFactory: DecisionFactory = () => [
-    // {
-    //   name: "Buy when OPEN > CLOSE",
-    //   func: ({ state, candle, index, candles }) => {
-    //     const { assets } = state;
-    //     const { o: price } = candle;
-    //     if (assets === 0 && index > 0 && price > candles[index - 1].c) {
-    //       return price;
-    //     }
-    //   },
-    // },
-    {
-      name: "Buy when OPEN >>> CLOSE",
-      func: ({ state, candle, index, candles }) => {
-        const { assets } = state;
-        const { o: price } = candle;
-        if (assets === 0 && index > 0 && price > candles[index - 1].c + 0.01) {
-          return price;
-        }
-      },
-    },    
-    // {
-    //   name: "Buy when OPEN > HIGH",
-    //   func: (
-    //     state: State,
-    //     candle: Candle,
-    //     index: number,
-    //     candles: Candle[]
-    //   ) => {
-    //     const { assets } = state;
-    //     const { o: price } = candle;
-    //     if (assets === 0 && index > 0 && price > candles[index - 1].h) {
-    //       return price;
-    //     }
-    //   },
-    // },
-  ];
-
-  const regularMarketBuy: Decision = {
-    name: "Buy on Regular market",
-    func: ({ state, candle }) => {
-      const { assets } = state;
-      const { time, o: price } = candle;
-      if (assets === 0 && isRegularMarket(time)) {
-        return price;
-      }
-    },
-  };
-
-  const takeProfitSellFactory: DecisionFactory = (profits: number[]) =>
-    profits.map((profit) => {
-      return {
-        name: `Sell when PROFIT = ${profit}`,
-        func: ({ state, candle }) => {
-          const { assets } = state;
-          if (assets > 0 && candle.h >= state.price * profit) {
-            return state.price * profit;
-          }
-        },
-      };
-    });
-
-  // const marketCloseSell: Decision = {
-  //   name: "Sell at market close",
-  //   func: ({ state, candle }) => {
-  //     const { assets } = state;
-  //     const { time, o: price } = candle;
-  //     if (assets > 0 && isClosingMarket(time)) {
-  //       return price;
-  //     }
-  //   },
-  // };
-
-  const buyStrategies = [...simpleBuyFactory(), regularMarketBuy]
-    .map((s, index, arr) => {
-      return [
-        s,
-        arr
-          .filter((item) => item !== s)
-          .map((item) => ({
-            name: `${s.name} && ${item.name}`,
-            func: (params: DecisionFuncParams) =>
-              s.func(params) && item.func(params),
-          })),
-      ].flat();
-    })
-    .flat();
-  // const sellStrategies = [
-  //   ...takeProfitSellFactory([1 + COMMISSION * 2]),
-  //   marketCloseSell,
-  // ];
-
-  // const buyStrategies = [regularMarketBuy];
-  const sellStrategies = [
-    ...takeProfitSellFactory([
-      1 + COMMISSION * 3,
-      1 + COMMISSION * 4,
-      1 + COMMISSION * 5,
-      1 + COMMISSION * 6,
-      1 + COMMISSION * 7,
-      1 + COMMISSION * 8,
-      1 + COMMISSION * 9,
-      1 + COMMISSION * 10,
-      1 + COMMISSION * 11,
-      1 + COMMISSION * 12,
-      1 + COMMISSION * 13,
-      1 + COMMISSION * 14,
-      1 + COMMISSION * 15,
-      1 + COMMISSION * 16,
-      1 + COMMISSION * 17,
-      1 + COMMISSION * 18,
-      1 + COMMISSION * 19,
-      1 + COMMISSION * 20,
-      1 + COMMISSION * 21,
-      1 + COMMISSION * 22,
-      1 + COMMISSION * 23,
-      1 + COMMISSION * 24,
-      1 + COMMISSION * 25,
-    ]),
-  ];
-
-  const strategies = buyStrategies
-    .map((buy) => sellStrategies.map((sell) => ({ buy, sell })))
-    .flat();
-
   try {
     info(`Loading candles for ${figiName.toUpperCase()}...`);
     const data = loadData(figiName)
     info(`Loaded ${data.length} candles, processing...`);
 
-    state = {
-      assets: 0,
-      money: INITIAL_MONEY,
-      positionCount: 0,
-    };
+    store.setMoney({ currency, value: INITIAL_MONEY })
 
-    let volume = 0
+    let takeProfitCount = 0
+    let stopLossCount = 0
 
     data.forEach((candle, index, candles) => {
       if (index === 0) return
 
-      if (state.assets === 0) {
+      if (!store.hasPosition) {
         const prevCandle = candles[index - 1]
         const buyPrice = candle.o
 
         // we know nothing about the candle at this point, except for candle.o
-        volume = prevCandle.v
-        // for (1 + 0.09) / (1 - 0.011)
-        // { assets: 0, money: 3887.4, positionCount: 306, price: undefined }
+        const volume = prevCandle.v
         const vSignal = volume > 1300
         const deltaSignal = true
         const pSignal = prevCandle.h < candle.o && candle.o < candle.c
+        const tSignal = isRegularMarket(candle.time)
 
-        // for 0.7 / 0.2
-        // { assets: 0, money: 2949.93, positionCount: 1206, price: undefined }
-        // const vSignal = volume > 1300
-        // const deltaSignal = true
-        // const pSignal = prevCandle.h < candle.o && candle.o < candle.c
-
-        // // const vSignal = volume > 14000 && volume < 40000
-        // // const vSignal = volume > 3500 && volume < 5000
-        // const vSignal = volume > 1300
-        // const deltaSignal = true // prevCandle.o <= prevCandle.c - 0.09
-        // // const pSignal = prevCandle.o < prevCandle.c && prevCandle.h <= candle.o
-        // const pSignal = prevCandle.h < candle.o && candle.o < candle.c
-        
         if (pSignal && deltaSignal && vSignal) {
           // BUY
-          const assets = Math.floor(
-            state.money / buyPrice / (1 + COMMISSION)
+          const lots = Math.floor(
+            store.money / buyPrice / (1 + COMMISSION)
           ); // max possible amount
-          const sum = fmtNumber(assets * buyPrice);
-          const comm = fmtNumber(sum * COMMISSION);
+          // const lots = 1
 
-          state = {
-            ...state,
-            assets,
-            money: fmtNumber(state.money - sum - comm),
-            price: buyPrice,
-          };
+          const sum = fmtNumber(lots * buyPrice);
+          const comm = fmtNumber(sum * COMMISSION);
+          const money = fmtNumber(store.money - sum - comm)
+          const avgPrice = buyPrice
+
+          store.setBuyCandle(candle)
+          store.setPosition({
+            figi,
+            name: figiName,
+            instrumentType: "Stock",
+            lots,
+            balance: lots,
+            averagePositionPrice: { currency, value: avgPrice }
+          })
+          store.setMoney({ currency, value: money })
         }
       }
 
-      if (state.assets > 0) {
-        const takeProfit = state.price * (1 + 0.075)
-        const stopLoss = state.price * (1 - 0.011)
-        // const takeProfit = state.price + 0.7
-        // const stopLoss = state.price - 0.2
-        if (takeProfit <= candle.h) {
+      if (store.hasPosition) {
+        if (store.takePrice <= candle.h) {
           // TAKE PROFIT
-          const sum = fmtNumber(state.assets * takeProfit);
+          const sum = fmtNumber(store.lots * store.takePrice);
           const comm = fmtNumber(sum * COMMISSION);
+          const money = fmtNumber(store.money + sum - comm)
 
-          state = {
-            ...state,
-            assets: 0,
-            money: fmtNumber(state.money + sum - comm),
-            price: undefined,
-            positionCount: state.positionCount + 1,
-          };
-        } else if (candle.l <= stopLoss) {
+          console.log('>', store.buyTime, '@', store.buyPrice, '->', candle.time, '@', store.takePrice)
+
+          store.setBuyCandle(undefined);
+          store.setPosition(undefined);
+          store.setMoney({ currency, value: money })
+          takeProfitCount += 1
+        } else if (candle.l <= store.stopPrice) {
           // STOP LOSS
-          const sum = fmtNumber(state.assets * stopLoss);
+          const sum = fmtNumber(store.lots * store.stopPrice);
           const comm = fmtNumber(sum * COMMISSION);
+          const money = fmtNumber(store.money + sum - comm)
 
-          state = {
-            ...state,
-            assets: 0,
-            money: fmtNumber(state.money + sum - comm),
-            price: undefined,
-            positionCount: state.positionCount + 1,
-          };
+          store.setBuyCandle(undefined);
+          store.setPosition(undefined);
+          store.setMoney({ currency, value: money })
+          stopLossCount += 1
+
+          // const lots = store.lots
+          // const sum = fmtNumber(lots * store.stopPrice);
+          // const comm = fmtNumber(sum * COMMISSION);
+          // const money = fmtNumber(store.money - sum - comm)
+          // const avgPrice = fmtNumber((store.buyPrice + store.stopPrice) / 2)
+
+          // if (money > 0) {
+          //   console.log('>', store.lots + lots, store.money, '->', money, avgPrice)
+
+          //   store.setPosition({
+          //     figi,
+          //     name: figiName,
+          //     instrumentType: "Stock",
+          //     lots: store.lots + lots,
+          //     balance: store.lots + lots,
+          //     averagePositionPrice: { currency, value: avgPrice }
+          //   })
+          //   store.setMoney({ currency, value: money })
+          // }
         }
       }
     })
 
     // reverting the last transaction
-    if (state.assets) {
-      const sum = fmtNumber(state.assets * state.price);
+    if (store.hasPosition) {
+      const sum = fmtNumber(store.lots * store.buyPrice);
       const comm = fmtNumber(sum * COMMISSION);
+      const money = fmtNumber(store.money + sum + comm) // revert comm also
 
-      state = {
-        ...state,
-        assets: 0,
-        money: fmtNumber(state.money + sum + comm),
-        price: undefined,
-      };
+      store.setPosition(undefined);
+      store.setMoney({ currency, value: money })
     }
 
-
-    /*
-    const results = strategies
-      .map(({ buy, sell }) => {
-        state = {
-          assets: 0,
-          money: INITIAL_MONEY,
-          positionCount: 0,
-        };
-
-        data.forEach((candle, index, candles) => {
-          const buyPrice = buy.func({ state, candle, index, candles });
-          const sellPrice = sell.func({ state, candle, index, candles });
-
-          if (buyPrice) {
-            const assets = Math.floor(
-              state.money / buyPrice / (1 + COMMISSION)
-            ); // max possible amount
-            const sum = fmtNumber(assets * buyPrice);
-            const comm = fmtNumber(sum * COMMISSION);
-
-            state = {
-              ...state,
-              assets,
-              money: fmtNumber(state.money - sum - comm),
-              price: buyPrice,
-            };
-          }
-          if (sellPrice) {
-            const sum = fmtNumber(state.assets * sellPrice);
-            const comm = fmtNumber(sum * COMMISSION);
-
-            state = {
-              ...state,
-              assets: 0,
-              money: fmtNumber(state.money + sum - comm),
-              price: undefined,
-              positionCount: state.positionCount + 1,
-            };
-          }
-        });
-
-        // reverting the last transaction
-        if (state.assets) {
-          const sum = fmtNumber(state.assets * state.price);
-          const comm = fmtNumber(sum * COMMISSION);
-
-          state = {
-            ...state,
-            assets: 0,
-            money: fmtNumber(state.money + sum + comm),
-            price: undefined,
-          };
-        }
-
-        return {
-          money: state.money,
-          buy: buy.name,
-          sell: sell.name,
-          positionCount: state.positionCount,
-        };
-      })
-      .sort((a, b) => b.money - a.money)
-      .slice(0, 15);
-    */
-
     info("Results:");
-    info(state)
+    info(`${store.money} ${store.moneyAmount.currency}, profits: ${takeProfitCount}, losses: ${stopLossCount}`)
 
-    // results.forEach((result) => {
-    //   info(result);
-    // });
   } catch (err) {
     info("FATAL", err);
   }

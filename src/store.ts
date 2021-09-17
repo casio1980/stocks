@@ -1,33 +1,43 @@
 import { Status } from './types'
 import { makeAutoObservable } from "mobx"
-import { CandleStreaming, PortfolioPosition } from "@tinkoff/invest-openapi-js-sdk";
+import { CandleStreaming, MoneyAmount, PortfolioPosition } from "@tinkoff/invest-openapi-js-sdk";
 import { fmtNumber } from "./lib/utils";
-import { STATUS_IDLE } from "./const";
+import { STATUS_IDLE, COMMISSION } from "./const";
 
 export class Store {
   status: Status = STATUS_IDLE
+
+  moneyAmount?: MoneyAmount = undefined
   position?: PortfolioPosition = undefined
   buyCandle?: CandleStreaming = undefined
 
   candles: CandleStreaming[] = []
 
-  constructor(candles: CandleStreaming[]) {
+  constructor(candles?: CandleStreaming[]) {
     makeAutoObservable(this, {
       candles: false
     })
 
-    this.candles = candles
+    this.candles = candles // TODO remove candles from store
   }
 
   get isIdle() {
     return this.status === STATUS_IDLE
   }
 
+  get money() {
+    return this.moneyAmount?.value || 0
+  }
+
   get hasPosition() {
     return !!this.position
   }
 
-  get lotsAvailable() {
+  get positionPrice() {
+    return this.lots * this.buyPrice
+  }
+
+  get lots() {
     return this.position?.lots || 0
   }
 
@@ -39,14 +49,21 @@ export class Store {
     return this.position?.averagePositionPrice?.value || this.buyCandle?.c
   }
 
+  get noProfitPrice() {
+    if (!this.buyPrice) return
+    return fmtNumber(this.buyPrice * (1 + COMMISSION * 2))
+  }
+
   get takePrice() {
     if (!this.buyPrice) return
-    return fmtNumber(this.buyPrice * (1 + 0.075))
+    // return fmtNumber(this.buyPrice * (1 + 0.01))
+    return fmtNumber(this.buyPrice * (1 + 0.074))
   }
 
   get stopPrice() {
     if (!this.buyPrice) return
-    return fmtNumber(this.buyPrice * (1 - 0.011))
+    return fmtNumber(this.buyPrice * (1 - 0.013))
+    // return fmtNumber(this.buyPrice * (1 - 0.011))
 
     // const { candles, prevCandle } = this
 
@@ -75,13 +92,17 @@ export class Store {
 
   get prevCandle() {
     const { candles, buyTime } = this
-    const buyCandleIndex = candles.findIndex(c => c.time === buyTime)
+    const buyCandleIndex = candles?.findIndex(c => c.time === buyTime)
 
     return buyCandleIndex > 0 ? candles[buyCandleIndex - 1] : undefined
   }
 
   setStatus(status: Status) {
     this.status = status
+  }
+
+  setMoney(money: MoneyAmount) {
+    this.moneyAmount = money
   }
 
   setPosition(position: PortfolioPosition) {

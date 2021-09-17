@@ -7,6 +7,9 @@ import { STATUS_IDLE, COMMISSION } from "./const";
 export class Store {
   status: Status = STATUS_IDLE
 
+  stopLimit: number = 0
+  takeLimit: number = 0   
+
   moneyAmount?: MoneyAmount = undefined
   position?: PortfolioPosition = undefined
   buyCandle?: CandleStreaming = undefined
@@ -56,14 +59,14 @@ export class Store {
 
   get takePrice() {
     if (!this.buyPrice) return
-    // return fmtNumber(this.buyPrice * (1 + 0.01))
-    return fmtNumber(this.buyPrice * (1 + 0.074))
+    // return fmtNumber(this.buyPrice * (1 + 0.074)) // TWTR
+    return fmtNumber(this.buyPrice * (1 + this.takeLimit))
   }
 
   get stopPrice() {
     if (!this.buyPrice) return
-    return fmtNumber(this.buyPrice * (1 - 0.013))
-    // return fmtNumber(this.buyPrice * (1 - 0.011))
+    // return fmtNumber(this.buyPrice * (1 - 0.013)) // TWTR
+    return fmtNumber(this.buyPrice * (1 - this.stopLimit))
 
     // const { candles, prevCandle } = this
 
@@ -107,6 +110,11 @@ export class Store {
 
   setPosition(position: PortfolioPosition) {
     this.position = position
+  }
+
+  setLimits({ stopLimit, takeLimit }: { stopLimit: number, takeLimit: number }) {
+    this.stopLimit = stopLimit
+    this.takeLimit = takeLimit
   }
 
   setBuyCandle(candle: CandleStreaming) {

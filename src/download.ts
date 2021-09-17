@@ -1,8 +1,5 @@
 import { Candle } from "@tinkoff/invest-openapi-js-sdk";
-import {
-  figiTWTR,
-  DATE_FORMAT,
-} from "./const";
+import { DATE_FORMAT } from "./const";
 import { info } from "./lib/logger";
 import fs from "fs";
 import getAPI from "./lib/api";
@@ -11,11 +8,9 @@ import moment from "moment";
 require("dotenv").config();
 
 const api = getAPI();
-
-const figiName = "twtr";
-const figi = figiTWTR;
-
 if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
+
+const figiName = "tsla";
 
 //
 // DOWNLOAD ROUTINE
@@ -23,8 +18,18 @@ if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
 
 (async function () {
   try {
+    // Obtaining figi
+    const ticker = figiName.toUpperCase();
+    const { instruments } = await api.stocks()
+    const { figi } = instruments.find(item => item.ticker === ticker) || {}
+
+    if (!figi) {
+      info(`Unknown figi for ${ticker}, terminating`);
+      return
+    }
+
     // Downloading day candles
-    info(`Downloading day candles for ${figiName.toUpperCase()}...`);
+    info(`Downloading day candles for ${ticker}...`);
     const { candles: days } = await api.candlesGet({
       from: `${moment().startOf("year").format(DATE_FORMAT)}T00:00:00Z`,
       to: `${moment().add(1, "days").format(DATE_FORMAT)}T00:00:00Z`,
@@ -37,10 +42,15 @@ if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
     fs.writeFileSync(filename, JSON.stringify(days), "utf8");
     // const candles = JSON.parse(fs.readFileSync(filename, "utf8")) as Candle[];
 
+    const folderName = `data/${figiName.toLowerCase()}`
+    if (!fs.existsSync(folderName)) {
+      fs.mkdirSync(folderName)
+    }
+
     // Downloading 1min candles
     const dates = days.map((c) => moment(c.time).format(DATE_FORMAT));
     for (const date of dates) {
-      const filename = `data/${figiName}/${figiName}-${date}.json`;
+      const filename = `${folderName}/${figiName.toLowerCase()}-${date}.json`;
 
       if (fs.existsSync(filename)) {
         const candles = JSON.parse(
@@ -57,7 +67,7 @@ if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
         });
 
         fs.writeFileSync(filename, JSON.stringify(minutes), "utf8");
-        info(`${filename}... Ok`);
+        info(`${filename}... Ok (${minutes.length} candles)`);
       }
     }
 

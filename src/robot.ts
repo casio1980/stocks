@@ -1,24 +1,22 @@
 import {
-  figiTWTR,
   INITIAL_MONEY,
   COMMISSION,
 } from "./const";
 import { info } from "./lib/logger";
-import getAPI from "./lib/api";
+// import getAPI from "./lib/api";
 import { fmtNumber, isRegularMarket, loadData } from "./lib/utils";
 import { Store } from "./store"
 
 require("dotenv").config();
 
-const api = getAPI();
+// const api = getAPI();
+// if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
 
-const currency = "USD";
 const figiName = "twtr";
-const figi = figiTWTR;
+const currency = "USD";
 
-const store = new Store()
-
-if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
+const store = new Store();
+store.setLimits({ takeLimit: 0.074, stopLimit: 0.013 });
 
 //
 // FIND BEST STRATEGY ROUTINE
@@ -53,7 +51,6 @@ if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
           const lots = Math.floor(
             store.money / buyPrice / (1 + COMMISSION)
           ); // max possible amount
-          // const lots = 1
 
           const sum = fmtNumber(lots * buyPrice);
           const comm = fmtNumber(sum * COMMISSION);
@@ -62,7 +59,7 @@ if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
 
           store.setBuyCandle(candle)
           store.setPosition({
-            figi,
+            figi: 'test',
             name: figiName,
             instrumentType: "Stock",
             lots,
@@ -107,7 +104,7 @@ if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
           //   console.log('>', store.lots + lots, store.money, '->', money, avgPrice)
 
           //   store.setPosition({
-          //     figi,
+          //     figi: 'test',
           //     name: figiName,
           //     instrumentType: "Stock",
           //     lots: store.lots + lots,

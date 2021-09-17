@@ -7,7 +7,6 @@
     "build-ts": "tsc",
     "build": "npm run build-ts",
     "download": "node dist/download.js",
-    "history": "node dist/history.js",
     "robot": "node dist/robot.js",
     "macd": "node dist/macd.js",
     "serve": "node dist/index.js",

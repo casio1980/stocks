@@ -32,6 +32,7 @@ let positionUpdateInterval: NodeJS.Timeout = undefined
 
 const candles: CandleStreamingMacd[] = []
 const store = new Store()
+store.setLimits({ takeLimit: 0.09, stopLimit: 0.059 });
 
 reaction(() => store.status, async (status) => {
   if ([STATUS_BUYING, STATUS_SELLING].includes(status)) {
@@ -114,33 +115,33 @@ async function onCandleUpdated(candle: CandleStreamingMacd, prevCandle: CandleSt
         process.exit()
       }
     }
-  } else if (isIdle && store.hasPosition) { 
-    if (candle.h >= store.takePrice || candle.c < store.stopPrice ) {
-      store.setStatus(STATUS_SELLING)
-      try {
-        await api.marketOrder({ figi, lots: store.lots, operation: 'Sell' })
-      } catch (err) {
-        logger.error("Unable to place Sell order:", err)
-        if (err.payload?.code === 'OrderBookException') { // TODO Types
-          logger.debug(`Retrying...`)
-          store.setStatus(STATUS_RETRY_SELLING)
-        } else {
-          process.exit()
-        }
-      }
-    }
-  } else if (store.status === STATUS_RETRY_SELLING) {
-    try {
-      await api.marketOrder({ figi, lots: store.lots, operation: 'Sell' })
-      store.setStatus(STATUS_SELLING)
-    } catch (err) {
-      logger.error("Unable to place Sell order:", err)
-      if (err.payload?.code === 'OrderBookException') { // TODO Types
-        logger.debug(`Retrying...`)
-      } else {
-        process.exit()
-      }
-    }
+  // } else if (isIdle && store.hasPosition) { 
+  //   if (candle.h >= store.takePrice || candle.c < store.stopPrice ) {
+  //     store.setStatus(STATUS_SELLING)
+  //     try {
+  //       await api.marketOrder({ figi, lots: store.lots, operation: 'Sell' })
+  //     } catch (err) {
+  //       logger.error("Unable to place Sell order:", err)
+  //       if (err.payload?.code === 'OrderBookException') { // TODO Types
+  //         logger.debug(`Retrying...`)
+  //         store.setStatus(STATUS_RETRY_SELLING)
+  //       } else {
+  //         process.exit()
+  //       }
+  //     }
+  //   }
+  // } else if (store.status === STATUS_RETRY_SELLING) {
+  //   try {
+  //     await api.marketOrder({ figi, lots: store.lots, operation: 'Sell' })
+  //     store.setStatus(STATUS_SELLING)
+  //   } catch (err) {
+  //     logger.error("Unable to place Sell order:", err)
+  //     if (err.payload?.code === 'OrderBookException') { // TODO Types
+  //       logger.debug(`Retrying...`)
+  //     } else {
+  //       process.exit()
+  //     }
+  //   }
   }
 }
 

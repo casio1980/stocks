@@ -35,8 +35,9 @@ store.setLimits({ takeLimit: 0.074, stopLimit: 0.013 });
     data.forEach((candle, index, candles) => {
       if (index === 0) return
 
+      const prevCandle = candles[index - 1]
+
       if (!store.hasPosition) {
-        const prevCandle = candles[index - 1]
         const buyPrice = candle.o
 
         // we know nothing about the candle at this point, except for candle.o
@@ -71,6 +72,9 @@ store.setLimits({ takeLimit: 0.074, stopLimit: 0.013 });
       }
 
       if (store.hasPosition) {
+        const volume = prevCandle.v
+        const vSignal = volume > 1300
+
         if (store.takePrice <= candle.h) {
           // TAKE PROFIT
           const sum = fmtNumber(store.lots * store.takePrice);
@@ -83,7 +87,7 @@ store.setLimits({ takeLimit: 0.074, stopLimit: 0.013 });
           store.setPosition(undefined);
           store.setMoney({ currency, value: money })
           takeProfitCount += 1
-        } else if (candle.l <= store.stopPrice) {
+        } else if (candle.l <= store.stopPrice && vSignal) {
           // STOP LOSS
           const sum = fmtNumber(store.lots * store.stopPrice);
           const comm = fmtNumber(sum * COMMISSION);

@@ -59,38 +59,12 @@ export class Store {
 
   get takePrice() {
     if (!this.buyPrice) return
-    // return fmtNumber(this.buyPrice * (1 + 0.074)) // TWTR
     return fmtNumber(this.buyPrice * (1 + this.takeLimit))
   }
 
   get stopPrice() {
     if (!this.buyPrice) return
-    // return fmtNumber(this.buyPrice * (1 - 0.013)) // TWTR
     return fmtNumber(this.buyPrice * (1 - this.stopLimit))
-
-    // const { candles, prevCandle } = this
-
-    // if (!prevCandle) return
-    // const initialStop = prevCandle.o - 0.05 // 0.2
-
-    // const nCount = 1 // 32 // 25
-    // const nCandles = candles.slice(Math.max(candles.length - nCount - 1, 0), candles.length - 1)
-    // const nLow = nCandles.length === nCount ? Number(Math.min(...nCandles.map(c => c.l)).toFixed(1)) : 0 // TODO fmtNumber
-
-    // return fmtNumber(Math.max(nLow, initialStop))
-
-    // const { candles, buyTime } = this
-    // const buyCandleIndex = candles.findIndex(c => c.time === buyTime)
-    // if (buyCandleIndex <= 0) return undefined
-
-    // const prevBuyCandle = candles[buyCandleIndex - 1]
-    // const initialStop = fmtNumber(prevBuyCandle.o - 0.05) // 0.2
-
-    // const nCount = 32 // 25
-    // const nCandles = candles.slice(Math.max(candles.length - nCount - 1, 0), candles.length - 1)
-    // const nLow = nCandles.length === nCount ? Number(Math.min(...nCandles.map(c => c.l)).toFixed(1)) : 0 // TODO fmtNumber
-
-    // return Math.max(nLow, initialStop)
   }
 
   get prevCandle() {

@@ -8,6 +8,7 @@
     "build": "npm run build-ts",
     "download": "node dist/download.js",
     "robot": "node dist/robot.js",
+    "robot2": "node dist/robot2.js",
     "macd": "node dist/macd.js",
     "serve": "node dist/index.js",
     "start": "npm run serve",

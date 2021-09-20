@@ -10,7 +10,7 @@ require("dotenv").config();
 const api = getAPI();
 if (process.env.PRODUCTION === "true") info("*** PRODUCTION MODE ***");
 
-const figiName = "tsla";
+const figiName = "twtr";
 
 //
 // DOWNLOAD ROUTINE
@@ -67,7 +67,7 @@ const figiName = "tsla";
         });
 
         fs.writeFileSync(filename, JSON.stringify(minutes), "utf8");
-        info(`${filename}... Ok (${minutes.length} candles)`);
+        info(`${filename}... OK (${minutes.length} candles)`);
       }
     }
 

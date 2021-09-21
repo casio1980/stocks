@@ -14,14 +14,8 @@ export class Store {
   position?: PortfolioPosition = undefined
   buyCandle?: CandleStreaming = undefined
 
-  candles: CandleStreaming[] = []
-
-  constructor(candles?: CandleStreaming[]) {
-    makeAutoObservable(this, {
-      candles: false
-    })
-
-    this.candles = candles // TODO remove candles from store
+  constructor() {
+    makeAutoObservable(this)
   }
 
   get isIdle() {
@@ -65,13 +59,6 @@ export class Store {
   get stopPrice() {
     if (!this.buyPrice) return
     return fmtNumber(this.buyPrice * (1 - this.stopLimit))
-  }
-
-  get prevCandle() {
-    const { candles, buyTime } = this
-    const buyCandleIndex = candles?.findIndex(c => c.time === buyTime)
-
-    return buyCandleIndex > 0 ? candles[buyCandleIndex - 1] : undefined
   }
 
   setStatus(status: Status) {

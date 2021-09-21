@@ -5,6 +5,7 @@ import getAPI from "./lib/api";
 import log4js from "log4js";
 import { Store } from "./store"
 import { reaction } from "mobx"
+import { fmtNumber } from "./lib/utils";
 import moment from "moment";
 
 require("dotenv").config();
@@ -25,14 +26,19 @@ const logger = log4js.getLogger(process.env.LOG_CATEGORY || "default");
 const isProduction = process.env.PRODUCTION === "true";
 
 const api = getAPI();
+
 const figi = figiTWTR;
+const currency = "USD";
+
 const lots = 10
+const takeLimit = 0.09
+const stopLimit = 0.059
 
 let positionUpdateInterval: NodeJS.Timeout = undefined
 
 const candles: CandleStreamingMacd[] = []
 const store = new Store()
-store.setLimits({ takeLimit: 0.09, stopLimit: 0.059 });
+store.setLimits({ takeLimit, stopLimit });
 
 reaction(() => store.status, async (status) => {
   if ([STATUS_BUYING, STATUS_SELLING].includes(status)) {
@@ -65,16 +71,16 @@ reaction(() => store.lots, async (lots) => {
 //   logger.debug('Position price:', price)
 // })
 reaction(() => store.buyPrice, async (price) => {
-  logger.debug('Buy price is:', price)
+  logger.debug(`Buy price is: ${price} ${currency}`)
 })
 reaction(() => store.noProfitPrice, async (price) => {
-  logger.debug('No profit price is:', price)
+  logger.debug(`No profit price is: ${price} ${currency}`)
 })
 reaction(() => store.takePrice, async (price) => {
-  logger.debug('Take price is:', price)
+  logger.debug(`Take price is: ${price} ${currency} | +${fmtNumber(takeLimit * 100)}%`)
 })
 reaction(() => store.stopPrice, async (price) => {
-  logger.debug('Stop price is:', price)
+  logger.debug(`Stop price is: ${price} ${currency} | -${fmtNumber(stopLimit * 100)}%`)
 })
 // reaction(() => store.prevCandle, async (candle) => {
 //   logger.debug('prevCandle changed', JSON.stringify(candle))

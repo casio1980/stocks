@@ -6,6 +6,7 @@ import { info } from "./lib/logger";
 // import getAPI from "./lib/api";
 import { fmtNumber, isRegularMarket, loadData } from "./lib/utils";
 import { Store } from "./store"
+import moment from "moment"
 
 require("dotenv").config();
 
@@ -16,7 +17,10 @@ const figiName = "twtr";
 const currency = "USD";
 
 const store = new Store();
-store.setLimits({ takeLimit: 0.074, stopLimit: 0.013 });
+// store.setLimits({ takeLimit: 0.074, stopLimit: 0.013 });
+
+store.setLimits({ takeLimit: 0.09, stopLimit: 0.059 });
+// store.setLimits({ takeLimit: 0.01, stopLimit: 0.05 });
 
 //
 // FIND BEST STRATEGY ROUTINE
@@ -73,7 +77,8 @@ store.setLimits({ takeLimit: 0.074, stopLimit: 0.013 });
 
       if (store.hasPosition) {
         const volume = prevCandle.v
-        const vSignal = volume > 1300
+        // const vSignal = volume > 1300
+        const vSignal = true
 
         if (store.takePrice <= candle.h) {
           // TAKE PROFIT
@@ -81,7 +86,9 @@ store.setLimits({ takeLimit: 0.074, stopLimit: 0.013 });
           const comm = fmtNumber(sum * COMMISSION);
           const money = fmtNumber(store.money + sum - comm)
 
-          console.log('>', store.buyTime, '@', store.buyPrice, '->', candle.time, '@', store.takePrice)
+          const duration = moment.duration(moment(candle.time).diff(store.buyTime));
+          const days = fmtNumber(duration.asDays(), 0)
+          console.log('>', store.buyTime, '@', store.buyPrice, '->', candle.time, '@', store.takePrice, '|', days, 'days')
 
           store.setBuyCandle(undefined);
           store.setPosition(undefined);

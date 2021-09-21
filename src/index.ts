@@ -59,25 +59,25 @@ reaction(() => store.position, async (position) => {
 })
 
 reaction(() => store.lots, async (lots) => {
-  console.log('Lots available:', lots)
+  logger.debug('Lots available:', lots)
 })
 // reaction(() => store.positionPrice, async (price) => {
-//   console.log('Position price:', price)
+//   logger.debug('Position price:', price)
 // })
 reaction(() => store.buyPrice, async (price) => {
-  console.log('Buy price is:', price)
+  logger.debug('Buy price is:', price)
 })
 reaction(() => store.noProfitPrice, async (price) => {
-  console.log('No profit price is:', price)
+  logger.debug('No profit price is:', price)
 })
 reaction(() => store.takePrice, async (price) => {
-  console.log('Take price is:', price)
+  logger.debug('Take price is:', price)
 })
 reaction(() => store.stopPrice, async (price) => {
-  console.log('Stop price is:', price)
+  logger.debug('Stop price is:', price)
 })
 // reaction(() => store.prevCandle, async (candle) => {
-//   console.log('prevCandle changed', JSON.stringify(candle))
+//   logger.debug('prevCandle changed', JSON.stringify(candle))
 // })
 
 async function onCandleInitialized(candle: CandleStreamingMacd) {

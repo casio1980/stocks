@@ -33,13 +33,16 @@ type Strategy = {
 // const takes = [0.07, 0.65, 0.06, 0.055, 0.05, 0.045, 0.04, 0.035, 0.03, 0.025, 0.02, 0.015, 0.01]
 // const stops = [0.06, 0.05, 0.04, 0.03, 0.02, 0.01]
 
+const takes = [0.1, 0.09, 0.08, 0.07, 0.016, 0.015, 0.014, 0.013, 0.012, 0.011, 0.01]
+const stops = [0.06, 0.05]
+
 // MOMO
 // const takes = [0.035]
 // const stops = [0.02]
 
 // TWTR
-const takes = [0.09]
-const stops = [0.059]
+// const takes = [0.09]
+// const stops = [0.059]
 // const stops = [0.05]
 
 // const strategies: Strategy[] = takes.map(item => ({ takeLimit: item, stopLimit: 0.013 }))
@@ -47,7 +50,8 @@ const strategies: Strategy[] = []
 
 takes.forEach((takeLimit) => {
   stops.forEach((stopLimit) => {
-    if (takeLimit > stopLimit) strategies.push({ takeLimit, stopLimit })
+    // if (takeLimit > stopLimit) strategies.push({ takeLimit, stopLimit })
+    strategies.push({ takeLimit, stopLimit })
   })
 })
 

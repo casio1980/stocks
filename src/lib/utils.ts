@@ -5,7 +5,7 @@ export function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-export function fmtNumber(number: any) { return +number.toFixed(2); }
+export function fmtNumber(number: any, digits: number = 2) { return +number.toFixed(digits); }
 
 export function isRegularMarket(date: string) {
   const d = new Date(date);

@@ -16,10 +16,12 @@ require("dotenv").config();
 const figiName = "twtr";
 const currency = "USD";
 
-const store = new Store();
-// store.setLimits({ takeLimit: 0.074, stopLimit: 0.013 });
+const takeLimit = 0.09
+const stopLimit = 0.059
 
-store.setLimits({ takeLimit: 0.09, stopLimit: 0.059 });
+const store = new Store();
+store.setLimits({ takeLimit, stopLimit });
+// store.setLimits({ takeLimit: 0.074, stopLimit: 0.013 });
 // store.setLimits({ takeLimit: 0.01, stopLimit: 0.05 });
 
 //
@@ -86,9 +88,10 @@ store.setLimits({ takeLimit: 0.09, stopLimit: 0.059 });
           const comm = fmtNumber(sum * COMMISSION);
           const money = fmtNumber(store.money + sum - comm)
 
+          const delta = fmtNumber(store.takePrice - store.buyPrice)
           const duration = moment.duration(moment(candle.time).diff(store.buyTime));
           const days = fmtNumber(duration.asDays(), 0)
-          console.log('>', store.buyTime, '@', store.buyPrice, '->', candle.time, '@', store.takePrice, '|', days, 'days')
+          console.log('>', store.buyTime, '@', store.buyPrice, '->', candle.time, '@', store.takePrice, '| TAKE', delta, 'in', days, 'days')
 
           store.setBuyCandle(undefined);
           store.setPosition(undefined);
@@ -99,6 +102,11 @@ store.setLimits({ takeLimit: 0.09, stopLimit: 0.059 });
           const sum = fmtNumber(store.lots * store.stopPrice);
           const comm = fmtNumber(sum * COMMISSION);
           const money = fmtNumber(store.money + sum - comm)
+
+          // const delta = fmtNumber(getStopPrice() - store.buyPrice)
+          // const duration = moment.duration(moment(candle.time).diff(store.buyTime));
+          // const days = fmtNumber(duration.asDays(), 0)
+          // console.log('>', store.buyTime, '@', store.buyPrice, '->', candle.time, '@', store.takePrice, '| LOSS', delta, 'in', days, 'days')
 
           store.setBuyCandle(undefined);
           store.setPosition(undefined);

@@ -1,6 +1,7 @@
 import { Candle } from "@tinkoff/invest-openapi-js-sdk";
 import { DATE_FORMAT } from "./const";
 import { info } from "./lib/logger";
+import { sleep } from "./lib/utils";
 import fs from "fs";
 import getAPI from "./lib/api";
 import moment from "moment";
@@ -31,8 +32,10 @@ const figiName = "twtr";
     // Downloading day candles
     info(`Downloading day candles for ${ticker}...`);
     const { candles: days } = await api.candlesGet({
+      // from: `${moment().add(-2, "years").startOf("year").format(DATE_FORMAT)}T00:00:00Z`,
+      // to: `${moment().add(-1, "years").startOf("year").format(DATE_FORMAT)}T00:00:00Z`,
       from: `${moment().startOf("year").format(DATE_FORMAT)}T00:00:00Z`,
-      to: `${moment().add(1, "days").format(DATE_FORMAT)}T00:00:00Z`,
+      to: `${moment().format(DATE_FORMAT)}T00:00:00Z`,
       figi,
       interval: "day",
     });
@@ -68,6 +71,8 @@ const figiName = "twtr";
 
         fs.writeFileSync(filename, JSON.stringify(minutes), "utf8");
         info(`${filename}... OK (${minutes.length} candles)`);
+
+        await sleep(5000)
       }
     }
 

@@ -48,9 +48,9 @@ store.setLimits({ takeLimit, stopLimit });
 
         // we know nothing about the candle at this point, except for candle.o
         const volume = prevCandle.v
-        const vSignal = volume > 1300
+        const vSignal = volume > 1400
         const deltaSignal = true
-        const pSignal = prevCandle.h < candle.o && candle.o < candle.c
+        const pSignal = prevCandle.o <= prevCandle.c && prevCandle.h < candle.o && candle.o < candle.c
         const tSignal = isRegularMarket(candle.time)
 
         if (pSignal && deltaSignal && vSignal) {
@@ -91,7 +91,7 @@ store.setLimits({ takeLimit, stopLimit });
           const delta = fmtNumber(store.takePrice - store.buyPrice)
           const duration = moment.duration(moment(candle.time).diff(store.buyTime));
           const days = fmtNumber(duration.asDays(), 0)
-          console.log('>', store.buyTime, '@', store.buyPrice, '->', candle.time, '@', store.takePrice, '| TAKE', delta, 'in', days, 'days')
+          // console.log(takeProfitCount + 1, '>', store.buyTime, '@', store.buyPrice, '->', candle.time, '@', store.takePrice, '| TAKE', delta, 'in', days, 'days')
 
           store.setBuyCandle(undefined);
           store.setPosition(undefined);
@@ -103,9 +103,9 @@ store.setLimits({ takeLimit, stopLimit });
           const comm = fmtNumber(sum * COMMISSION);
           const money = fmtNumber(store.money + sum - comm)
 
-          // const delta = fmtNumber(getStopPrice() - store.buyPrice)
-          // const duration = moment.duration(moment(candle.time).diff(store.buyTime));
-          // const days = fmtNumber(duration.asDays(), 0)
+          const delta = fmtNumber(store.stopPrice - store.buyPrice)
+          const duration = moment.duration(moment(candle.time).diff(store.buyTime));
+          const days = fmtNumber(duration.asDays(), 0)
           // console.log('>', store.buyTime, '@', store.buyPrice, '->', candle.time, '@', store.takePrice, '| LOSS', delta, 'in', days, 'days')
 
           store.setBuyCandle(undefined);

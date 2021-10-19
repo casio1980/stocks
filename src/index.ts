@@ -30,7 +30,7 @@ const api = getAPI();
 const figi = figiTWTR;
 const currency = "USD";
 
-const lots = 10
+const lots = 60
 const takeLimit = 0.09
 const stopLimit = 0.059
 

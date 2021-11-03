@@ -107,8 +107,8 @@ async function onCandleUpdated(candle: CandleStreamingMacd, prevCandle: CandleSt
   if (isIdle && !store.hasPosition) {
     const volume = prevCandle.v
     const vSignal = volume > 1400
-    const deltaSignal = true // prevCandle.o <= prevCandle.c - 0.09
-    const pSignal = prevCandle.o <= prevCandle.c && prevCandle.h < candle.o && candle.o < candle.c
+    const deltaSignal = prevCandle.o <= prevCandle.c
+    const pSignal = prevCandle.h < candle.o && candle.o < candle.c
     const dupSignal = store.buyTime !== candle.time
 
      if (vSignal && deltaSignal && pSignal && dupSignal) {
@@ -118,36 +118,39 @@ async function onCandleUpdated(candle: CandleStreamingMacd, prevCandle: CandleSt
         await api.marketOrder({ figi, lots, operation: 'Buy' })
       } catch (err) {
         logger.error("Unable to place Buy order:", err)
+        process.exit() // TODO
+      }
+    }
+  } else if (isIdle && store.hasPosition) {
+    const volume = prevCandle.v
+    const vSignal = volume > 1400
+
+    if (store.takePrice <= candle.h || (candle.l <= store.stopPrice && vSignal)) {
+      store.setStatus(STATUS_SELLING)
+      try {
+        await api.marketOrder({ figi, lots: store.lots, operation: 'Sell' })
+      } catch (err) {
+        logger.error("Unable to place Sell order:", err)
+        if (err.payload?.code === 'OrderBookException') { // TODO Types
+          logger.debug(`Retrying...`)
+          store.setStatus(STATUS_RETRY_SELLING)
+        } else {
+          process.exit()
+        }
+      }
+    }
+  } else if (store.status === STATUS_RETRY_SELLING) {
+    try {
+      await api.marketOrder({ figi, lots: store.lots, operation: 'Sell' })
+      store.setStatus(STATUS_SELLING)
+    } catch (err) {
+      logger.error("Unable to place Sell order:", err)
+      if (err.payload?.code === 'OrderBookException') { // TODO Types
+        logger.debug(`Retrying...`)
+      } else {
         process.exit()
       }
     }
-  // } else if (isIdle && store.hasPosition) { 
-  //   if (candle.h >= store.takePrice || candle.c < store.stopPrice ) {
-  //     store.setStatus(STATUS_SELLING)
-  //     try {
-  //       await api.marketOrder({ figi, lots: store.lots, operation: 'Sell' })
-  //     } catch (err) {
-  //       logger.error("Unable to place Sell order:", err)
-  //       if (err.payload?.code === 'OrderBookException') { // TODO Types
-  //         logger.debug(`Retrying...`)
-  //         store.setStatus(STATUS_RETRY_SELLING)
-  //       } else {
-  //         process.exit()
-  //       }
-  //     }
-  //   }
-  // } else if (store.status === STATUS_RETRY_SELLING) {
-  //   try {
-  //     await api.marketOrder({ figi, lots: store.lots, operation: 'Sell' })
-  //     store.setStatus(STATUS_SELLING)
-  //   } catch (err) {
-  //     logger.error("Unable to place Sell order:", err)
-  //     if (err.payload?.code === 'OrderBookException') { // TODO Types
-  //       logger.debug(`Retrying...`)
-  //     } else {
-  //       process.exit()
-  //     }
-  //   }
   }
 }
 

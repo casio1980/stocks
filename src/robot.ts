@@ -49,9 +49,9 @@ store.setLimits({ takeLimit, stopLimit });
         // we know nothing about the candle at this point, except for candle.o
         const volume = prevCandle.v
         const vSignal = volume > 1400
-        const deltaSignal = true
-        const pSignal = prevCandle.o <= prevCandle.c && prevCandle.h < candle.o && candle.o < candle.c
-        const tSignal = isRegularMarket(candle.time)
+        const deltaSignal = prevCandle.o <= prevCandle.c
+        const pSignal = prevCandle.h < candle.o && candle.o < candle.c
+        // const tSignal = isRegularMarket(candle.time)
 
         if (pSignal && deltaSignal && vSignal) {
           // BUY
@@ -79,8 +79,8 @@ store.setLimits({ takeLimit, stopLimit });
 
       if (store.hasPosition) {
         const volume = prevCandle.v
-        // const vSignal = volume > 1300
-        const vSignal = true
+        const vSignal = volume > 1400
+        // const vSignal = true
 
         if (store.takePrice <= candle.h) {
           // TAKE PROFIT
@@ -91,7 +91,7 @@ store.setLimits({ takeLimit, stopLimit });
           const delta = fmtNumber(store.takePrice - store.buyPrice)
           const duration = moment.duration(moment(candle.time).diff(store.buyTime));
           const days = fmtNumber(duration.asDays(), 0)
-          // console.log(takeProfitCount + 1, '>', store.buyTime, '@', store.buyPrice, '->', candle.time, '@', store.takePrice, '| TAKE', delta, 'in', days, 'days')
+          console.log(takeProfitCount + 1, '>', store.buyTime, '@', store.buyPrice, '->', candle.time, '@', store.takePrice, '| TAKE', delta, 'in', days, 'days')
 
           store.setBuyCandle(undefined);
           store.setPosition(undefined);
@@ -106,7 +106,7 @@ store.setLimits({ takeLimit, stopLimit });
           const delta = fmtNumber(store.stopPrice - store.buyPrice)
           const duration = moment.duration(moment(candle.time).diff(store.buyTime));
           const days = fmtNumber(duration.asDays(), 0)
-          // console.log('>', store.buyTime, '@', store.buyPrice, '->', candle.time, '@', store.takePrice, '| LOSS', delta, 'in', days, 'days')
+          console.log('>', store.buyTime, '@', store.buyPrice, '->', candle.time, '@', store.takePrice, '| LOSS', delta, 'in', days, 'days')
 
           store.setBuyCandle(undefined);
           store.setPosition(undefined);

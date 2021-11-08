@@ -3,6 +3,7 @@ export const figiTWTR = "BBG000H6HNW3";
 export const figiFOLD = "BBG000PLF6N0";
 
 export const DATE_FORMAT = "YYYY-MM-DD";
+export const TIME_FORMAT = "HH:mm:ss";
 export const DEFAULT_FROM_DATE = "2010-01-01";
 
 export const INITIAL_MONEY = 1000;

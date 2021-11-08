@@ -23,6 +23,9 @@ log4js.configure({
 
 const logger = log4js.getLogger(process.env.LOG_CATEGORY || "default");
 
+const TelegramBot = require('node-telegram-bot-api');
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false }); // https://github.com/yagop/node-telegram-bot-api
+
 const isProduction = process.env.PRODUCTION === "true";
 
 const api = getAPI();
@@ -51,8 +54,23 @@ reaction(() => store.status, async (status) => {
 })
 
 reaction(() => store.position, async (position) => {
+  if (position) {
+    const { lots, buyPrice, takePrice, stopPrice } = store
+    logger.debug(`Position: ${lots} lots`)
+    logger.debug(`Buy price: ${buyPrice} ${currency}`)
+    logger.debug(`Take price: ${takePrice} ${currency} | +${fmtNumber(takeLimit * 100)}%`)
+    logger.debug(`Stop price: ${stopPrice} ${currency} | -${fmtNumber(stopLimit * 100)}%`)
+
+    await bot.sendMessage(process.env.TELEGRAM_CHAT_ID, `
+      Position: ${lots} lots\nBuy price: ${buyPrice} ${currency}\nTake price: ${takePrice} ${currency} | +${fmtNumber(takeLimit * 100)}%\nStop price: ${stopPrice} ${currency} | -${fmtNumber(stopLimit * 100)}%`);
+  } else {
+    logger.debug(`Position closed`)
+    await bot.sendMessage(process.env.TELEGRAM_CHAT_ID, `Position closed`);
+  }
+
   if (store.status === STATUS_BUYING) {
     if (position?.averagePositionPrice) {
+      // position is loaded
       store.setStatus(STATUS_IDLE)
       clearInterval(positionUpdateInterval);
     }
@@ -64,29 +82,32 @@ reaction(() => store.position, async (position) => {
   }
 })
 
-reaction(() => store.lots, async (lots) => {
-  logger.debug('Lots available:', lots)
-})
+// reaction(() => store.lots, async (lots) => {
+//   logger.debug(`Lots available: ${lots}`)
+// })
 // reaction(() => store.positionPrice, async (price) => {
 //   logger.debug('Position price:', price)
 // })
-reaction(() => store.buyPrice, async (price) => {
-  logger.debug(`Buy price is: ${price} ${currency}`)
-})
-reaction(() => store.noProfitPrice, async (price) => {
-  logger.debug(`No profit price is: ${price} ${currency}`)
-})
-reaction(() => store.takePrice, async (price) => {
-  logger.debug(`Take price is: ${price} ${currency} | +${fmtNumber(takeLimit * 100)}%`)
-})
-reaction(() => store.stopPrice, async (price) => {
-  logger.debug(`Stop price is: ${price} ${currency} | -${fmtNumber(stopLimit * 100)}%`)
-})
+// reaction(() => store.buyPrice, async (price) => {
+//   logger.debug(`Buy price is: ${price} ${currency}`)
+// })
+// reaction(() => store.noProfitPrice, async (price) => {
+//   logger.debug(`No profit price is: ${price} ${currency}`)
+// })
+// reaction(() => store.takePrice, async (price) => {
+//   logger.debug(`Take price is: ${price} ${currency} | +${fmtNumber(takeLimit * 100)}%`)
+// })
+// reaction(() => store.stopPrice, async (price) => {
+//   logger.debug(`Stop price is: ${price} ${currency} | -${fmtNumber(stopLimit * 100)}%`)
+// })
 // reaction(() => store.prevCandle, async (candle) => {
 //   logger.debug('prevCandle changed', JSON.stringify(candle))
 // })
 
 async function onCandleInitialized(candle: CandleStreamingMacd) {
+  logger.info(`Started at ${candle.time}`)
+  await bot.sendMessage(process.env.TELEGRAM_CHAT_ID, `Started at ${moment(candle.time).format('HH:mm')}`);
+
   const { positions } = await api.portfolio();
   const position = positions.find((el) => el.figi === figi);
   store.setPosition(position)
@@ -94,8 +115,6 @@ async function onCandleInitialized(candle: CandleStreamingMacd) {
     // logger.info(`There is an open position of ${position.lots} lots, terminating`)
     // process.exit()
   // }
-
-  logger.info('Started at', candle.time)
 }
 
 async function onCandleUpdated(candle: CandleStreamingMacd, prevCandle: CandleStreamingMacd) {
@@ -117,8 +136,10 @@ async function onCandleUpdated(candle: CandleStreamingMacd, prevCandle: CandleSt
       try {
         await api.marketOrder({ figi, lots, operation: 'Buy' })
       } catch (err) {
-        logger.error("Unable to place Buy order:", err)
-        process.exit() // TODO
+        logger.error(`Unable to place Buy order: ${err}`)
+        await bot.sendMessage(process.env.TELEGRAM_CHAT_ID, `Unable to place Buy order: ${err}`)
+
+        process.exit()
       }
     }
   } else if (isIdle && store.hasPosition) {
@@ -130,7 +151,9 @@ async function onCandleUpdated(candle: CandleStreamingMacd, prevCandle: CandleSt
       try {
         await api.marketOrder({ figi, lots: store.lots, operation: 'Sell' })
       } catch (err) {
-        logger.error("Unable to place Sell order:", err)
+        logger.error(`Unable to place Sell order: ${err}`)
+        await bot.sendMessage(process.env.TELEGRAM_CHAT_ID, `Unable to place Sell order: ${err}`)
+
         if (err.payload?.code === 'OrderBookException') { // TODO Types
           logger.debug(`Retrying...`)
           store.setStatus(STATUS_RETRY_SELLING)
@@ -144,7 +167,9 @@ async function onCandleUpdated(candle: CandleStreamingMacd, prevCandle: CandleSt
       await api.marketOrder({ figi, lots: store.lots, operation: 'Sell' })
       store.setStatus(STATUS_SELLING)
     } catch (err) {
-      logger.error("Unable to place Sell order:", err)
+      logger.error(`Unable to place Sell order: ${err}`)
+      await bot.sendMessage(process.env.TELEGRAM_CHAT_ID, `Unable to place Sell order: ${err}`)
+
       if (err.payload?.code === 'OrderBookException') { // TODO Types
         logger.debug(`Retrying...`)
       } else {

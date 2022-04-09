@@ -30,7 +30,7 @@
     "dotenv": "8.2.0",
     "log4js": "6.3.0",
     "mobx": "6.1.8",
-    "moment": "2.27.0",
+    "moment": "2.29.2",
     "node-telegram-bot-api": "^0.54.0",
     "technicalindicators": "3.1.0"
   }
